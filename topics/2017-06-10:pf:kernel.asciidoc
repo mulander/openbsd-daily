@@ -1,0 +1,616 @@
+= Packet Filter
+:author: mulander <mulander@openbsd.org>
+
+== LICENSE
+
+== NOTES
+
+== Goal
+
+Multi day reading of the pf OpenBSD firewall, we will start at pfctl
+and go deeper by picking a direction doing code reading. We want to go
+down to the kernel, not only staying on pfctl side.
+
+=== First session
+
+For those new to OpenBSD, pf stands for Packet Filter and was first
+introduced in OpenBSD 3.0
+
+[quote,IcePick]
+______________________________________________________________________
+
+As a replacement for IPF which was pulled when the license was deemed
+incompatible with BSDL.
+______________________________________________________________________
+
+pf has many features including filtering tcp/ip trafffic, nat
+handling, normalizing packets, bandwidth shaping, packet priorities
+and statefull tracking of connections. Outside of OpenBSD it's well
+know for a sane, human readable syntax. For a quick example, here is a
+set of rules that block brute force attemts on ssh:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+table <children> persist file "/etc/pf.children"
+block in quick proto tcp from <children> to any
+pass in on $ext_if proto tcp to any port ssh flags S/SA keep state \
+(max-src-conn 5, max-src-conn-rate 5/5, overload <children> flush global)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This rule set results in blocking anyone trying to connect to the ssh
+port 5 times in 5 seconds persist file will load the table with ip
+addresses stored in /etc/pf.children. Though this is not a pf
+tutorial, and we want to jump in to some code
+
+Handy man pages:
+
+ * http://man.openbsd.org/pfctl.8[`pfctl(8)`], utility used for
+   controlling the firewall
+ 
+ * http://man.openbsd.org/pf[`pf(2)`], describing the pf pseudo device
+
+ 
+Actual filtering happens in the kernel itself, in order for a userland
+program like pfctl to alter the internal state of the kernel one needs
+some kind of interface. hat would allow him to tell the kernel that
+something needs to change. That interface could be a sysctl, syscall
+or a deice, if you're crazy you could also crete a procfs filesystem
+to control internal kernel subsystems.
+
+In case of pf we have a pseudo-device `/dev/pf` which is controlled
+from userland via various ioctl's they all are nicely documented
+within http://man.openbsd.org/pf[`pf(2)`].
+ 
+We also saw that OpenBSD daemons and utilities follow a similar
+configuration syntax/layout.  In our cases we noticed that with doas
+and httpd pf is no different and allows a sysadmin to specify the
+firewall rules in `/etc/pf.conf`, this is documented under
+http://man.openbsd.org/pf.conf.5[`pf.conf(5)`]. I already predict it
+must be parsed using a similar `parse.y` yacc based parser we saw in
+`doas`.
+
+[NOTE] I never myself read the pf code, both userland and kernel - so
+       this is somewhat showing how I tend to explore unkown parts of
+       the code base
+
+Let's start with a look on
+https://github.com/openbsd/src/tree/master/sbin/pfctl[`pfctl`]. Stepping
+back a bit, our `/dev/pf` is not the only pseudo-device for this
+subsystem.  We also have a pflog interface used for storing captured
+packets for futher inspection documented in
+http://man.openbsd.org/pflog.4[`pflog(4)`].
+
+We also have a userland `pflogd` which reads packets from those
+interfaces and turns them into regular log files documented under
+http://man.openbsd.org/pflogd.8[`pflogd(8)`].
+ 
+Looking at `pfctl` itself, first thing that I was wondering about who
+does the parsing of `pf.conf`.  It's obviously needed on boot and the
+sys admin need to reload the configuration is the parsing code
+somewhere in the kernel or in some userland utilities.  We already see
+`parse.y` in the linked `pfctl` folder and a quick grep of `/etc`
+reveals that `rc` indeed calls `pfctl` to load the rules on boot:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ /etc/rc:        print -- "$RULES" | pfctl -f -
+ /etc/rc:        pfctl -e
+ /etc/rc:                pfctl -f /etc/pf.conf
+ /etc/rc.d/pflogd:       if pfctl -si | grep -q Enabled; then
+ /etc/rc.d/spamlogd:     if pfctl -si | grep -q Enabled; then
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Now we saw how the yacc parser works before. `pf.conf` has a lot more
+features than `doas`, but I don't think we need to go line by line
+through the `parse.y` file (unless we find a need to check some
+specific syntax constructs)
+ 
+I'm going to refer anyone curious for
+http://man.openbsd.org/pf.conf.5[`pf.conf`] which defines the grammar
+which is rather simple.  I will only point out one important caveat,
+for each packet processed by the packet filter, the filter rules are
+evaluated in sequential order, from first to last. For block and pass,
+the last matching rule decides what action is taken; if no rule
+matches the packet, the default action is to pass the packet without
+creating a state. For match, rules are evaluated every time they
+match; the pass/block state of a packet remains unchanged. This
+description is taken from the `pf.conf(5)` man page. So the order of
+the rules has a collosal impact.
+
+Quick overview of files in pfctl:
+
+ * Makefile - standard build script
+ 
+ * parse.y - rule parsing
+ 
+ * pf_print_state.c - helper functions for outputing the current
+   connection state for pf synced with another openbsd machine with
+   pfsync
+
+Will mention it here just in case:
+
+ * http://man.openbsd.org/pfsync
+ 
+ * pfctl.8 - the man page
+ 
+ * pfctl.c - bulk of the utility, main
+ 
+ * pfctl.h - same as above
+ 
+ * pfctl_optimize.c - optimizing pf.conf after it's expanded to a full
+   ruleset
+ 
+A single pf rule, can be expanded into multiple pf rulesets,
+especially if we consider that things like macros can be defined in
+the configuration file itself
+ 
+ * pfctl_osfp.c - handles the p0f style finger printing
+ 
+[NOTE] p0f is a passive OS detection system created by lcamtuf (Michal
+       Zalewski) it's integrated with OpenBSD's pf.
+
+[quote,skrzyp]
+______________________________________________________________________
+
+20:33 < skrzyp> the os fingerprint database was made by lcamtuf (Michal Zalewski) about 15 years ago
+ so one can for example block any windows machine from contacting it's server
+20:33 < skrzyp> woah mulander :D
+20:34 < skrzyp> that database is not 100% accurate though, there are some cases of wrong detection, on Android and newer Windowses mostly
+______________________________________________________________________
+
+ * pfctl_parser.c - looks like a grouping of helper parsing functions
+   for pfctl itself - possiby to handle user provided addresses,
+   etc...
+ 
+ * second looks at pfctl_parser.h - makes me think this part of the
+   code might also parse data from the pseudo devices it controls to
+   present it to the user later;
+ 
+ * pfctl_queue.c - handles bandwidth shaping features;
+ 
+ * pfctl_radix.c and pfctl_table.c - are handling tables in pf.
+ 
+We saw a sample of a table in the example I pasted, a children table
+containing IP address of people we want to block for ssh bruteforcing.
+
+______________________________________________________________________
+
+20:38 <@brynet> A momentary interlude, recognizing rain1's nc patch
+                was committed:
+                http://marc.info/?l=openbsd-cvs&m=149711845528658&w=2
+20:39 < IcePic> o7
+20:39 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 2 | Channel rules: https://ptpb.pw/cnx1 | Next: 2017.06.10 / duncaen: rebound / mulander: 18:00 UTC
+20:40 < mikeb> bada-boom!
+20:41 <@brynet> mikeb@! ^
+______________________________________________________________________
+
+We got a general overview of what pfctl composes off
+
+______________________________________________________________________
+
+20:42 < rain1> I have a question, is that ok
+ yes, ask :)
+20:42 < rain1> so this pf tool creates a new network device, the pf pseudo device
+20:43 < rain1> is that basically just a container for network packets?
+
+Not the tool, the kernel exposes a psuedo device pfctl just talks to
+the device and the kernel internally handles the packets, you can tell
+it to send them off to a logging interface to capture them and inspect
+ 
+20:44 < DuClare> man 4 pf gives an overview of what the pseudo device
+                 lets you do
+
+by default openbsd has a pflog0 interface so you could tell it to grab
+all connections to pornhub.com, capture that as a wall_of_shame
+interface and use tcpdump to grab the image stills of what each user
+watched to show it live on a projector without having to run tcpdump
+on all of your traffic. So the definition would be in pf.conf, loaded
+to the kernel using pfctl. The kernel would be instructed via the pf
+pseudo device how to process the rule and to output the packets
+matching the logging rle to the logging interface
+ 
+20:46 < rain1> i see!
+
+20:47 < DuClare> rain1 controlling the in-kernel packet filter
+                 revolves around rules and tables, but you can also
+                 manipulate states http://man.openbsd.org/pf.4
+______________________________________________________________________
+
+
+`pfctl` is quite large, possibly the largest code base we read so far
+and that's just accounting for the control utility itself (sic)! 13k
+lines of code, out of which 5.3k is the parser. the main itself is ~2k
+lines
+  
+Let's try to do a quick first pass read of `pfctl.c`.  Obviously if we
+spot something wrong or have questions along the way - stop and ask.
+
+ * standard includes according to `style(9)`;
+ 
+ * system includes, network includes then remaining includes;
+ 
+ * again a chunk of forward declarations;
+ 
+ * next up we have a chunk of globals for option parsing, most notably
+   char *pf_device = "/dev/pf";
+
+______________________________________________________________________
+
+20:51 <@brynet> mulander might actually be evil, for the logs.
+ evil or wrong? :)
+______________________________________________________________________
+
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ $ ls -alh /dev/pf
+ crw-------  1 root  wheel   73,   0 Jun 10 16:13 /dev/pf
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+There's also an indent macro using the `do {} while (0)` trick.
+
+
+20:54 < DuClare> For pretty-printing rules.
+20:54 < rain1> i'd make that a function :P
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ #define INDENT(d, o)    do {                                        \
+                                 if (o) {                            \
+                                         int i;                      \
+                                         for (i=0; i < d; i++)       \
+                                                 printf("  ");       \
+                                 }                                   \
+                         } while (0)                                 \
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The `do { } while(0)` makes sure this is only executed once, and
+behaves the same way regardless where in C it's evoked a usage
+function for outputting help and we are starting to see `pfctl_*`
+functions. let's stop on.
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+int
+pfctl_enable(int dev, int opts)
+{
+ 	if (ioctl(dev, DIOCSTART)) {
+ 		if (errno == EEXIST)
+ 			errx(1, "pf already enabled");
+ 		else
+ 			err(1, "DIOCSTART");
+ 	}
+ 	if ((opts & PF_OPT_QUIET) == 0)
+ 		fprintf(stderr, "pf enabled\n");
+ 	return (0);
+}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 
+
+When we started we spoke of pf being controlled by a pseudo-device
+called `/dev/pf` that is controlled using various `ioctl`'s. We saw an
+ioctl in use when reading the doas command, where a `/dev/tty` ioctl
+handled the `persist` keyword for keeping auth active. Here we see a
+`ioctl(dev, DIOCSTART)`.
+
+ dev in this case is an open pf_device (/dev/pf)
+ dev = open(pf_device, mode);
+ as expected.
+ http://man.openbsd.org/pf#DIOCSTART[`pf`].
+
+
+Start the packet filter.
+ 
+So actually controlling the firewall programatically is not that
+terrible.  The only bit I don't see documented nicely is how errno can
+be set per ioctl call.  I'm tempted to look how `DIOCSTART` itself is
+implemented and where it sets `EEXIST` and we are going to do that
+diversion now. I search the whole source tree with ag for `DIOCSTART`.
+
+First hits are some man pages. One promising thing is
+`sys/net/pf_ioctl.c` but I'm letting ag to finish before I bail it out
+looks like that's it. Opening up `sys/net/pf_ioctl` and behold here it
+is.
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         case DIOCSTART:
+                 if (pf_status.running)
+                         error = EEXIST;
+                 else {
+                         pf_status.running = 1;
+                         pf_status.since = time_uptime;
+                         if (pf_status.stateid == 0) {
+                                 pf_status.stateid = time_second;
+                                 pf_status.stateid = pf_status.stateid << 32;
+                         }
+                         pf_create_queues();
+                         DPFPRINTF(LOG_NOTICE, "pf: started");
+                 }
+                 break;
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A quick glance over this switch reveales that there are a few more
+errors being set and sys/net/pf* is 18.8k. `sys/net/pf_*` is around
+7.7k lines of code.
+
+______________________________________________________________________
+21:05 < rain1> this (and everything in sys maybe?) is code inside the bsd kernel?
+
+it might be worthwhile to ask if we want this documented in pf(4) man
+page src/sys/net/pf_ioctl.c is inside the kernel
+______________________________________________________________________
+
+
+Ok going back to userland `pfctl`. We can go quite quickly through the
+remaining `pfctl_*` functions, disable, clear_stats, etc... They call
+ioctls on the device and print back feedback to the user.  We know
+where to check whach each one does and where to check why an errno was
+set.  I'm slowly scrolling through, trying to find anything that might
+be out of place but not digging too deep yet, as most are just ioctl
+call plus some string mangling for output and finally `main` function
+on line 2208.  Again a bunch of flags for getopt parsing, getopt
+itself, then some fine grained command handling for anchors. On line
+2400 we actually open the `/dev/pf` device
+
+______________________________________________________________________
+
+21:20 <@mikeb> a lot of people don't know you can do pctl -a '*' -sr
+
+interesting, I think that's an explicit example in the man page
+
+21:21 <@mikeb> fair enough :)
+
+To print the main ruleset recursively, specify only '*' as the anchor
+name:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pfctl -a '*' -sr
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+under `pfctl(8)`
+______________________________________________________________________
+
+Line 2416 are display options, grabbing various stats and state
+information.  In 2482 we list our rules, I assume those are already
+expanded versus the compacted format of `/etc/pf.conf`. Then we have
+various clear rules, to zero out state.
+
+Line 2527 state killers, my favorite, when adding a spammer to your
+children table, he still can have multiple open connections. Since pf
+is stateful, adding that IP to the children table will prevent new
+connections but won't remove existing ones
+ 
+To do that, you can invokes:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pfctl -k ${IP_ADDRESS}
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+which will kill all already established connections from that
+source. We have some more option parsing along the way, and finally a
+`pfctl_state_store` and `pfctl_state_load`.
+
+______________________________________________________________________
+
+21:26 < BlackFrog> Which source are you reviewing?  pfctl.c or pf.c?  Because I couldn't find the state killers, your fav
+
+`pfctl.c`
+ 
+21:28 < BlackFrog> thanks, but the
+http://code.metager.de/source/xref/OpenBSD/src/sbin/pfctl/pfctl.c
+doesn't have line 2527
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ $ doas pfctl -S test.state 
+ $ ls -alh test.state
+ -rw-r--r--  1 root  mulander  22.9K Jun 10 21:28 test.state
+ $ file test.state
+ test.state: data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+ BlackFrog: uhm, not sure what that site is and how old of a code base it has
+
+You can looks at header:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ - /*$OpenBSD: pfctl.c,v 1.332 2015/12/10 17:27:00 mmcc Exp $ */
+ my file
+ - /*$OpenBSD: pfctl.c,v 1.344 2017/05/30 12:13:04 henning Exp $ */
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+21:29 <@mikeb> BlackFrog: just use https://github.com/openbsd/src/blob/master/sbin/pfctl/pfctl.c
+ that site has outdated code
+ yep, use what mikeb pointed at ^
+
+21:30 < BlackFrog> thanks for the link
+21:30 < bluewizard> cd ..
+21:30 < DuClare> Or checkout the repo and enjoy the ability to grep all across it :)
+ ok the output I pasted
+ was me checking out how -S dumping state to a file works
+21:30 <@mikeb> or this from soviet union for the cross-reference: http://bxr.su/OpenBSD/sbin/pfctl/pfctl.c
+______________________________________________________________________
+
+== Second Part
+
+Main file to go over today
+https://github.com/openbsd/src/blob/master/sys/net/pf_ioctl.c.  We
+know that pf is controlled from userland by calling `ioctl(2)` on the
+`/dev/pf` pseudo-device http://man.openbsd.org/pf - defines all
+available ioctl commands. We won't be recreating that manual there, so
+please look stuff up when needed
+
+______________________________________________________________________
+
+20:06 < vyvup> btw, is there a guideline when ioctls/device is used or
+               a syscall for communication with the kernel?
+
+I don't know if there's an official rule/preference, there are however
+some caveats with ioctls since they operate on a device you would need
+a file descriptor to talk with the kernel in some cases you coud not
+be able to open those or be at a limit
+
+20:09 < vyvup> yeah like in the /dev/random case
+
+I also *assume* sysctls would be faster as one layer less
+
+[NOTE] I'm very new to kernel developent, practically learning with
+all of you here :)
+
+you might want to read on sysctl(3) man page and ioctl(2)
+
+20:10 < vyvup> np, discussing it is already helpful
+
+______________________________________________________________________
+
+
+Standard includes, for the first time we see some conditional
+includes, for INET6 and NPFSYNC. I'm wondering where are those from
+(kernel config?) and what's the default. So I will do a quick grep for
+those 2 values over the whole source. I see a bunch of conf files
+defining the INET6 option but none defining NPFSYNC, can't quickly
+find where NPFSYNC is defined, let's move on to not stall on the
+headers. Next we have forward declarations, two structs to storepf
+rules, a pf_trans_set struct, a bunch of defines for a bitmask
+ 
+20:27 < dsp> interesting that it has a TAG_ID_MAX althgouh it uses the tailq
+20:27 < dsp> it could be a relic from a more static like array impl.
+20:28 < dsp> it is used in tagname2tag where the whole queue is traversed. tha max is fetched,incremented and compared to that TAG_ID_MAX
+
+
+perhaps more is unrealistic or performs badly, 50k is a lot of rules
+ah it's not even for rules but for tags
+ 
+20:30 < dsp> also since this tagname2tag function returns u16t it should be bounded by 65535 which is close enough
+
+ a tag is like a variable,
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tag string
+ 
+ Packets matching this rule will be tagged with the specified
+ string. The tag acts as an internal marker that can be used to
+ identify these packets later on. This can be used, for example, to
+ provide trust between interfaces and to determine if packets have
+ been processed by translation rules. Tags are "sticky", meaning that
+ the packet will be tagged even if the rule is not the last matching
+ rule.
+ 
+ Further matching rules can replace the tag with a new one but will
+ not remove a previously applied tag. A packet is only ever assigned
+ one tag at a time. Tags take the same macros as labels (see above).
+ 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+So you can have a rule grabbing some traffic, name it and re-use it
+later I can't see anyone reasonably using 50k named tags in a pf conf.
+https://github.com/openbsd/src/commit/1ffa893a1e66327e61bcedf0e975cdcdf09a7d33
+Rhe limit was there from the start.
+
+Here's home work for you, check how `parse.y` in `smtpctl` handles
+tags. It might also have a limit on the parsing side. Which is called
+in DIOCADDRULE. There's a WITH_PF_LOCK, a read write lock on the pf code,
+ this was added a week ago
+ and is part of the ongoing work to rid the kernel lock from OpenBSD
+ https://github.com/openbsd/src/commit/956659a2c9191e0927b4f56584d8209ea85115f5.
+ Then we are at `pf_attach`.
+ pool-init comes from `sys/kern/subr_pool.c`
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  * Initialize the given pool resource structure.
+  *
+  * We export this routine to allow other kernel parts to declare
+  * static pools that must be initialized before malloc() is available.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Line 49 of that file describes what this API is used for
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  * Pool resource management utility.
+  *
+  * Memory is allocated in pages which are split into pieces according to
+  * the pool item size. Each page is kept on one of three lists in the
+  * pool structure: `pr_emptypages', `pr_fullpages' and `pr_partpages',
+  * for empty, full and partially-full pages respectively. The individual
+  * pool items are on a linked list headed by `ph_items' in each page
+  * header. The memory for building the page list is either taken from
+  * the allocated pages themselves (for small pool items) or taken from
+  * an internal pool of page headers (`phpool').
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+We create pools for rules, states, queues, etc.  `hfsc_initialize`
+uses the API from sys/net/hfsc.c. This is a hierarchical fair service
+curve.  I'm assuming used for traffic shaping. `pfr_initialize` from
+`pf_table.c` for handling tables in `pf` `pfi_initialize` from
+`pf_if.c` for interface handling `pf_osfp_initialize` - for p0f os
+fingerprinting. `pool_sethardlimit` - optionally limits the states pf uses
+
+I can't find what atop does and where it's defined. the only close
+thing I found was at libexec `libexec/spamd-setup/spamd-setup.c` but
+that doesn't seem to be it. I'm talking about the check in L176
+ 
+So I tend to grep for `^fn` as by style(9) function are defined as
+`rettype\n`, `name(args)`. So grep `^name` is quick way to find a
+function without the noise but obviously fails for macros.
+
+Ok next we define 2 red black trees, one for src address tracking, and
+second one for anchors. We initialize the ruleset in `sys/net/pfvar.h`.
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 1385:#define PFR_KENTRY_HIWAT_SMALL     100000  /* Number of entries for tiny hosts */
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Line 189 mentions garbage collection. I didn't knew pf internally had
+one. Then we initialize default timeouts with `pf_normalize_init` for
+initializing the subsystem responsible for packet
+normalization. Bzero'ing the pf_status struct and an interesting `XXX`
+comment:
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 228    /* XXX do our best to avoid a conflict */
+ 229    pf_status.hostid = arc4random();
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+worth to have in mind when we see hostid to see what conflicts we are
+talking about here and we schedule creation of a kernel thread with
+the name of pfpurge defined in Line 236. The thread itself lives in
+http://bxr.su/OpenBSD/sys/net/pf.c#1202. `pfopen` opens up the device.
+`ENXIO` represents a 'device not configured' error `pfclose` - closes
+our device `pf_rm_rule` , remove rules.
+ 
+`pf_rm_rule` drops the rule and everything related to it.  `pf` purge
+rule call `pf_rm_rule` and does additional ref counting.  It's also
+called from the context of our kernel purge thread.  `tagname2tag` is
+converting a named tag to an identifier.  `tag2tagname` does the
+reverse.  `tag_unfref` deletes a tag.  `pf_tag*` functions are
+wrappers for the above.
+
+Next we have label handling functions,
+`pf_q*` functions are reusing the tag mechanism for queue naming it appears.
+
+Next we have rules application and rollback followed by queue removal
+code.  There's a queue interface struct and `pf_ifp2q` converting an
+interface to a `pf_queue` interface
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 559 struct pf_queue_if {
+ 560    struct ifnet        *ifp;
+ 561    const struct ifq_ops    *ifqops;
+ 562    const struct pfq_ops    *pfqops;
+ 563    void            *disc;
+ 564    struct pf_queue_if  *next;
+ 565 };
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+

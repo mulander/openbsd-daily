@@ -1,0 +1,494 @@
+20:01 [Users #openbsd-daily]
+20:01 [@akfaew        ] [ bruflu      ] [ fcbsd        ] [ lucias     ] [ qbit[m]  ] [ tarug0        ] 
+20:01 [@dlg           ] [ brynet      ] [ filwishe1    ] [ luisbg     ] [ quinq    ] [ taschenraeuber] 
+20:01 [@fcambus       ] [ cengizIO    ] [ g0relike     ] [ mandarg    ] [ rabbitear] [ tdjones       ] 
+20:01 [@mikeb         ] [ commandoline] [ geetam       ] [ mattl      ] [ rain1    ] [ tdmackey      ] 
+20:01 [@mulander      ] [ corbyhaas   ] [ ghostyy      ] [ metadave   ] [ rajak    ] [ Technaton     ] 
+20:01 [@t_b           ] [ davl        ] [ ghugha       ] [ mikeputnam ] [ rEv9     ] [ thrym         ] 
+20:01 [ acidfoo-_     ] [ deei        ] [ harrellc00per] [ mpts       ] [ rgouveia ] [ timclassic    ] 
+20:01 [ administraitor] [ Dhole       ] [ Harry        ] [ MurphSlaw  ] [ rnelson  ] [ TronDD        ] 
+20:01 [ akkartik      ] [ dmfr        ] [ IcePic       ] [ mwhisenhunt] [ ryan     ] [ TuxOtaku      ] 
+20:01 [ antoon_i      ] [ dostoyesvky ] [ jaypatelani  ] [ Naabed-    ] [ S007     ] [ Vaelatern     ] 
+20:01 [ antranigv     ] [ Dowzee      ] [ jbernard     ] [ nacci      ] [ scadu    ] [ vbarros       ] 
+20:01 [ ar            ] [ DrPete      ] [ jonbryan     ] [ nacelle    ] [ selckin  ] [ venam         ] 
+20:01 [ asie          ] [ dsp         ] [ jsing        ] [ nailyk     ] [ SETW     ] [ vyvup         ] 
+20:01 [ azend|vps     ] [ DuClare     ] [ kAworu       ] [ Niamkik    ] [ SETW_    ] [ whyt          ] 
+20:01 [ babasik122    ] [ duncaen     ] [ kittens      ] [ noexcept_  ] [ sgnorptz ] [ wilornel      ] 
+20:01 [ bcd           ] [ dxtr        ] [ kl3          ] [ norakam    ] [ skizye   ] [ wodim         ] 
+20:01 [ bch           ] [ eau         ] [ kpcyrd       ] [ oldlaptop  ] [ skrzyp   ] [ WubTheCaptain ] 
+20:01 [ benpicco      ] [ ebag        ] [ kraucrow     ] [ owa        ] [ smiles`  ] [ xor29ah       ] 
+20:01 [ biniar        ] [ electricto4d] [ kysse        ] [ petrus_lt  ] [ Soft     ] [ zelest        ] 
+20:01 [ brianpc       ] [ emigrant    ] [ landers2     ] [ phy1729    ] [ stateless] [ zyklon        ] 
+20:01 [ brianritchie  ] [ entelechy   ] [ lk23789k23   ] [ poptart    ] [ stsp     ] 
+20:01 [ brtln         ] [ erethon     ] [ lteo[m]      ] [ qbit       ] [ swankier ] 
+20:01 -!- Irssi: #openbsd-daily: Total of 130 nicks [6 ops, 0 halfops, 0 voices, 124 normal]
+20:01 <@mulander> --- code read: smtpctl/smtpd debugging leaking connections ---
+20:01 <@mulander> *** goal: track this sucker down ***
+20:02 <@mulander> yesterday we managed to reproduce our problem by overloading the clamav scanner
+20:02 <@mulander> by sending 10 emails with 256k data base64 encoded in short succession
+20:03 <@mulander> we determined that this indeed results in a stale connection between smtpd and the clamav scanner
+20:03 <@mulander> the messages are properly delivered on retries but the connection grabbing the data back from clamav is not closed up properly
+20:04 <@mulander> we will enable some debugging features in smtpd and reproduce the error
+20:04 <@mulander> in order to minimize the amount of data my mail server lekas from actual traffic, I decided to gate it out form the internet during the test
+20:05 <@mulander> this should allow us to still pound it from localhost as much as we want but external smtp mailers will get block and will queue a retry to deliver my regular mail
+20:05 <@mulander> we also have to pick a method to debug this
+20:05 <@mulander> on #opensmtpd we were suggested to try:
+20:05 <@mulander> 21:57 <@mulander> 21:56 < umaxx> really if you start smtpd -dv -Tall you may be able to figure out where exactly the session die, you at least may be able to see where it not dies, e.g. logs until where it 
+20:05 <@mulander> 21:57 <@mulander>                comes :)
+20:05 <@mulander> 21:57 <@mulander> 21:56 < umaxx> my gramar is bad today
+20:05 <@mulander> 21:57 <@mulander> 21:56 < umaxx> but I guess you know what I mean
+20:06 <@mulander> let's check first what -dv -Tall means
+20:06 <@mulander> -d don't daemonize, so this would stay on our current shell
+20:07 <@mulander> -v verbose output
+20:07 <@mulander> -T is enabling trace interfaces
+20:07 <@mulander> all enables all subsystems
+20:07 <@mulander> the available subsystems are
+20:07 -!- Irssi: Pasting 12 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:07 <@mulander>              o   imsg
+20:07 <@mulander>              o   io
+20:07 <@mulander>              o   smtp (incoming sessions)
+20:07 <@mulander>              o   filters
+20:07 <@mulander>              o   transfer (outgoing sessions)
+20:07 <@mulander>              o   bounce
+20:07 <@mulander>              o   scheduler
+20:07 <@mulander>              o   expand (aliases/virtual/forward expansion)
+20:07 <@mulander>              o   lookup (user/credentials lookups)
+20:07 <@mulander>              o   stat
+20:07 <@mulander>              o   rules (matched by incoming sessions)
+20:07 <@mulander>              o   mproc
+20:08 <@mulander> now, we will generate some traffic, so I don't think enabling all will be a good idea.
+20:08 <@mulander> my initial bets would be io, smtp, transfer(?), stat
+20:08 <@mulander> any opinions?
+20:09 < DuClare> I also want io and smtp, don't care about transfer, don't care about stat.  Might want imsg but it's so-so.
+20:09 <@mulander> ok, let's start with smtp, io first?
+20:09 < DuClare> You can generate different traces, it takes only a few minutes right?  So let's not spend too much time thinking about that :)
+20:09 <@mulander> yep
+20:09 <@mulander> ok, let me block port 25 externally
+20:10 < DuClare> Make sure you remember to run fstat before and after so we see the relevant port numbers
+20:10 <@mulander> I will be shutting down smtpd between each test
+20:10 < DuClare> Ok, sure
+20:14 <@mulander> ok, port 25 blocked from the outside and available to localhost
+20:15 <@mulander> smtpd stopped
+20:16 <@mulander> running with -Tio -Tsmtp as -dv
+20:16 <@mulander> I hav one undelivered outgoing email in the queue
+20:17 <@mulander> that's from production use, and not related to our tests
+20:17 <@mulander> otherwise
+20:17 <@mulander> 0 connections
+20:17 <@mulander> ok, let's run our test with 10 256kb files
+20:17 < DuClare> Fwiw the tracing will leak the message's contents if it goes thru io during the trace
+20:17 < DuClare> ... probably.
+20:17 < DuClare> :-)
+20:18 <@mulander> that message is a public reply to one of the openbsd mailing lists
+20:18 < DuClare> Fine
+20:18 <@mulander> wondering if I should redirect the output to a file beforehand
+20:19 < DuClare> Yes
+20:21 <@mulander> running
+20:22 <@mulander> one message is still in flight
+20:23 < DuClare> Let's hope it doesn't take a dozen tries to reproduce the issue
+20:23 < DuClare> :-)
+20:23 <@mulander> I think it already reproduced
+20:23 < DuClare> Yea.  Hope so.
+20:23 < DuClare> It's always fun when enabling debugging makes the problem disappear..
+20:23 <@mulander> I see 9 emails in my inbox
+20:23 <@mulander> and one not there
+20:24 <@mulander> I'll copy current log aside
+20:24 <@mulander> connection closed unexpectedly
+20:24 <@mulander> I'll copy the log now
+20:24 <@mulander> so it's not spoiled with the retry
+20:25 <@mulander> http://junk.tintagel.pl/smtpd-1.txt 5.5M
+20:26 < DuClare> You've capped connections at 128kB/s?
+20:26 < Niamkik> huge... /o\
+20:26 < DuClare> Just wondering.  The transfer rate seems too precise to be so by coincidence
+20:26 <@mulander> DuClare: I didn't limit downloads
+20:26 <@mulander> it's a vultr node
+20:26 < DuClare> Nevermind
+20:26 < DuClare> Okay.
+20:27 <@mulander> Niamkik: most of that are the 10 copies of the 256k file
+20:28 <@mulander> root     clamsmtpd  96669    5* internet stream tcp 0x0 127.0.0.1:21984 --> 127.0.0.1:10026
+20:28 <@mulander> root     clamsmtpd  96669   10* internet stream tcp 0x0 127.0.0.1:10045 <-- 127.0.0.1:26182
+20:28 <@mulander> btw it just went through a retry
+20:28 <@mulander> and delivered the email
+20:30 <@mulander> I should have copied the envelope  id after it blocked
+20:31 <@mulander> mta_route_unref?
+20:31 <@mulander> in mta c
+20:35 < DuClare> smtp: 0xe54baa1e000: >>> 250 2.0.0: 4f36f9e3 Message accepted for delivery
+20:35 < DuClare> smtp: 0xe54baa1e000: STATE_BODY -> STATE_HELO
+20:35 < DuClare> smtp: 0xe54baa1e000: IO_LOWAT <io:0xe551d0d5000 fd=25 to=300000 fl=W,F_PI ib=0 ob=0>
+20:37 <@mulander> debug: smtp: 0xe54baa1e000: filter congestion: pausing session
+20:37 < DuClare> Aha!
+20:37 <@mulander> debug: smtp: 0xe54baa1e000: filter congestion over: resuming session
+20:37 < DuClare> Oh.
+20:37 < DuClare> By the way
+20:38 < DuClare> Is it still running?
+20:38 <@mulander> yes
+20:38 <@mulander> though it's walled off from the internet
+20:38 < DuClare> Just wondering if anything was appended since there's supposed to be a timeout
+20:38 <@mulander> I can copy the full one from current state
+20:39 <@mulander> https://junk.tintagel.pl/smtpd-1-full.txt
+20:44 <@mulander> http://bxr.su/OpenBSD/usr.sbin/smtpd/mta_session.c#1488
+20:44 <@mulander> ignore last paste
+20:47 <@mulander> roughly I'm looking at the code locating the last part of the trace
+20:47 -!- Irssi: Pasting 11 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:47 <@mulander> mta: 0xe5578dfc6f0: IO_DISCONNECTED <io:0xe54ceebc100 fd=24 to=300000 fl=R ib=0 ob=0>
+20:47 <@mulander> debug: mta: 0xe5578dfc6f0: disconnected in state MTA_MAIL
+20:47 <@mulander> smtp-out: Error on session b6500bf70aa7700e after 1 message sent: Connection closed unexpectedly
+20:47 <@mulander> b6500bf70aa7700e mta event=delivery evpid=2e3c24430a5113ef from=<mulander@tintagel.pl> to=<mulander@tintagel.pl> rcpt=<-> source="127.0.0.1" relay="127.0.0.1 (localhost)" delay=3m24s result="TempFail" stat="Connection closed unexpectedly"
+20:47 <@mulander> debug: mta: 0xe5578dfc6f0: session done
+20:47 <@mulander> debug: mta_route_collect([] <-> 127.0.0.1 (localhost))
+20:47 <@mulander> debug: mta: connecting with [connector:[]->[relay:127.0.0.1,port=10045,mx],0x0]
+20:47 <@mulander> debug: mta: no task for connector
+20:47 <@mulander> debug: mta: mta_route_unref(): really discarding route [] <-> 127.0.0.1 (localhost)
+20:47 <@mulander> debug: mta: freeing [relay:127.0.0.1,port=10045,mx]
+20:47 <@mulander> debug: mta: freeing [connector:[]->[relay:127.0.0.1,port=10045,mx],0x0]
+20:47 <@mulander> debug: mta: flush for 2e3c24430a5113ef (-> mulander@tintagel.pl)
+20:47 <@mulander> starts in http://bxr.su/OpenBSD/usr.sbin/smtpd/mta_session.c#1331
+20:51 <@mulander> smtp-out: Error on session b6500bf70aa7700e after 1 message sent: Connection closed unexpectedly
+20:51 <@mulander> comes from mta_session.c#mta_error
+20:52 <@mulander> then it goes to free
+20:53 < DuClare> I'm more concerned about the pause flag..
+20:55 < martin__2> was this going out to clamav or coming back form?
+20:56 < DuClare> mulander is looking at the outgoing connection
+20:57 <@mulander> yeah and nothing changes there since 6.0 (except some structs being now opaque)
+20:58 <@mulander> DuClare: if you have a hunc on this one please feel free to drive
+20:59 < DuClare> I'm surprised the data io is called, I thought it was specific to filters.. you don't have filters, do you?
+20:59 <@mulander> no filters
+21:00 <@mulander> dkim relay and clamav
+21:00 < DuClare> Maybe I've misunderstood the code.  I just saw text about filters and then ignored all these sections..
+21:00 <@mulander> plus dovecot for imap
+21:01 <@mulander> well, wek now there are 10 messages to be sent
+21:01 <@mulander> debug: smtpd: mda process done for session - this shows up 9 times
+21:03 <@mulander> off by one, there are also 10 new session counts
+21:03 < martin__2> mta_error(struct mta_session *s, const char *fmt, ...) what is those dots there?
+21:03 < DuClare> It's a variadic function
+21:03 <@mulander> martin__2: variable length arguments
+21:03 <@mulander> as in like printf
+21:04 < martin__2> Ok.
+21:05 <@mulander> DuClare: maybe it's better to retest with stat tracing? that way we can compare when smtp.session decrease is missing
+21:05 <@mulander> compared to other emails
+21:08 <@mulander> DuClare: I have a clue
+21:08 < DuClare> Do tell
+21:08 <@mulander> _smtpd   smtpd      59376   25* internet stream tcp 0x0 127.0.0.1:10026 <-- 127.0.0.1:24050
+21:08 <@mulander> 4th column is the FD
+21:09 < DuClare> Yes
+21:09 <@mulander> fd ID's are printed in the logs
+21:09 < DuClare> Yes
+21:09 < DuClare> And the io for that fd is paused
+21:09 <@mulander> you were already on to thaat :P?
+21:09 < DuClare> 21:35 < DuClare> smtp: 0xe54baa1e000: IO_LOWAT <io:0xe551d0d5000 fd=25 to=300000 fl=W,F_PI ib=0 ob=0>
+21:09 < DuClare> 21:53 < DuClare> I'm more concerned about the pause flag..
+21:09 <@mulander> ok I missed you had a connection with the fstat output
+21:10 < DuClare> That obviously causes the timeout not to work, but what sets the pause flag and why
+21:12 <@mulander> so that output is defined in ioev.c
+21:12 <@mulander> as IO_PAUSE_IN
+21:13 <@mulander> (well by the output we know the symbol used)
+21:13 <@mulander> there's also an IO_PAUSE_OUT
+21:14 <@mulander> they are an alias for IO_IN and IO_OUT
+21:14 <@mulander> which have code handling in mta_session.c and smtp_session.c
+21:14 <@mulander> with following functions:
+21:14 <@mulander> io_resume, io_pause and io_paused
+21:15 <@mulander> apparently the pause handling was refactored 7 months ago
+21:18 < DuClare> Was that before or after the version you're running?
+21:18 < DuClare> (I'm looking at -current code btw...)
+21:18 <@mulander> I'm also looking at current
+21:18 <@mulander> the bug was not present on 6.0
+21:19 <@mulander> the bug is present on 6.1
+21:19 <@mulander> guess a cvs diff of mta.session.c and smtp_session.c between the two tags could help?
+21:22 < DuClare> Maybe.  Meanwhile I'll keep reading looking.
+21:23 <@mulander> http://junk.tintagel.pl/smtp_session.c.txt
+21:23 < Niamkik> lot of modification... seems hard to find something here: https://cvsweb.openbsd.org/cgi-bin/cvsweb/src/usr.sbin/smtpd/smtp_session.c.diff?r1=text&tr1=1.284.4.2&r2=text&tr2=1.303
+21:23 <@mulander> http://junk.tintagel.pl/mta_session.c.txt
+21:26 < DuClare> In hindsight, it think it would've been best to test -current before starting to chase the bug
+21:27 <@mulander> I don't see anything in the diff itself
+21:35 <@mulander> DuClare: there's at least one path with no debug output
+21:35 <@mulander> that puts it into pause
+21:35 <@mulander> http://bxr.su/OpenBSD/usr.sbin/smtpd/mda.c#530
+21:35 < DuClare> Which one?
+21:35 < DuClare> That's a different io
+21:36 < martin__2> When looking at the diff between 6.0 and 6.1 you referenced earlier i can see some changes that looks to be regarding pause
+21:36 <@mulander> martin__2: yes, because there was a refactor to make it opaque
+21:37 <@mulander> but I didn't see changes in the calls (ie. missing pause/free pair)
+21:37 <@mulander> s/free/resume/
+21:39 <@mulander> DuClare: what about smtp_data_io with IO_LOWAT
+21:40 < DuClare> That is also a different io
+21:40 < DuClare> (And that does resume rather than pause)
+21:42 < DuClare> If we were doing java, I'd have io_pause spit out a backtrace and do a rerun..
+21:43 < DuClare> And if this were on my system, I'd probably trace it in gdb
+21:44 <@mulander> probably the best course of action would be to reproduce it on a minimal localhost config
+21:44 <@mulander> without getting my server involved (ie. in a vm)
+21:45 <@mulander> I don't think any other bits of my setup impact it, except perhaps the actual ram/cpu of this node
+21:45 < DuClare> Oh hhmmm
+21:47 <@mulander> found something?
+21:47 < DuClare> I was wrong about that io being different.  Confusing!
+21:49 < DuClare> The filter paths juggle two ios
+21:49 <@mulander> debug: smtp: 0xe54baa1e000: filter congestion over: resuming session
+21:49 <@mulander> smtp: 0xe54baa1e000: IO_DATAIN <io:0xe551d0d5000 fd=25 to=300000 fl=R ib=32778 ob=0>
+21:49 <@mulander> looks like it was resumed wasn't it?
+21:50 < DuClare> There is another pause
+21:50 < DuClare> That isn't resumed
+21:50 < DuClare> smtpd-1-full.txt:smtp: 0xe54baa1e000: IO_DATAIN <io:0xe551d0d5000 fd=25 to=300000 fl=R ib=16839 ob=0>
+21:50 < DuClare> smtpd-1-full.txt:debug: smtp: 0xe54baa1e000: filter congestion: pausing session
+21:51 < DuClare> smtpd-1-full.txt:smtp: 0xe54baa1e000 (data): IO_LOWAT <io:0xe55ac8e8c00 fd=32 to=-1 fl=W ib=0 ob=0>
+21:51 < DuClare> Sorry, I'm pasting my grep output..
+21:52 < DuClare> So the context lines aren't back to back in the original file
+21:52 < DuClare> But that pause isn't resumed
+21:54 <@mulander> yeah definetely one resume is missing
+21:54 < DuClare> I have an idea
+21:54 <@mulander> in the shortened log (without the final retry) - 28 pauses, 27 resumes
+21:55 < DuClare> Can you compile the code?
+21:56 <@mulander> checking errata
+21:56 <@mulander> doesn't seem to be any for opensmtpd so I guess I can recompile it
+21:58 <@mulander> let me try to see if it compiles cleanly
+22:00 <@mulander> compiling
+22:01 <@mulander> DuClare: yes, I can recompile without issus
+22:01 <@mulander> *issues
+22:01 < DuClare> http://guu.fi/g/smtp.patch
+22:01 < DuClare> I can't compile on 6.0 so be the guinea pig
+22:02 <@mulander> the server is 6.1
+22:02 < DuClare> As long as you can compile smtpd, it shouldn't matter
+22:02 < DuClare> If it does, we'll find out
+22:03 <@mulander> applied
+22:03 <@mulander> errors out
+22:04 < DuClare> I left an unclosed brace
+22:04 <@mulander> yeah
+22:04 < DuClare> remove it at the end of the if line
+22:04 < DuClare> :)
+22:05 <@mulander> compiled
+22:05 <@mulander> will install it as /usr/sbin/smtpd_new
+22:05 < DuClare> I hope smtp_data_io_done doesn't do anything that would require to resume before we call it
+22:05 < DuClare> At a glance, it doesn't seem to
+22:06 < DuClare> Actually we might have to
+22:06 < DuClare> But we'll see shortly
+22:06 <@mulander> doesn't hurt to try
+22:07 < DuClare> I still can't see which are all the calls make the io clockwork tick.  It's a bit weird.
+22:07 <@mulander> it's running
+22:07 <@mulander> starting the test
+22:08 <@mulander> running
+22:08 < DuClare> Oh there's an io_reload in io_resume.  This might be ok then
+22:08 <@mulander> all passed
+22:08 <@mulander> so not reproduced
+22:08 <@mulander> let me try again, just in case
+22:08 < DuClare> Sure, run a dozen times
+22:09 < DuClare> With 30MB files too :-)
+22:09 <@mulander> 20 times 20kb files.
+22:11 < DuClare> Clam might not be broken after all
+22:11 < DuClare> If the smtpd session hangs, then clam might be the one that timeouts and closes the other end too (where we see the unexpected close)
+22:13 <@mulander> sory was kicked , local networking issues
+22:14 <@mulander> still having >60% packet drops to google
+22:14 <@mulander> after re-logging in, sending about 20 emals didn't leave hanging connections
+22:15 <@mulander> DuClare: I'm going to try 10 big ones, but without logging
+22:15 < DuClare> Yup
+22:16 < DuClare> So the bug seems to be that smtpd runs into filter congestion (high water on data io), if it happens near the very end of a message's path through the data io, we end up calling data_io_done without actually resuming the smtp session, as if data io were still busy...
+22:17 < DuClare> And the session was paused due to the congestion.
+22:17 < DuClare> So we're left with no ongoing data io and a paused session.
+22:21 <@mulander> sorry, if I stutter reply, packet loss on local net.
+22:21 <@mulander> test ongoing with >10 21MB files
+22:22 <@mulander> (the ones we labeled 16m were actual closer to 21mdue to base64 encode)
+22:24 <@mulander> 12 msgs still in flight
+22:24 <@mulander> all in flight none with connection errors
+22:24 <@mulander> 4 curr connections
+22:24 < DuClare> I'm not in a hurry.  I hope you're not in a hurry :)
+22:24 <@mulander> all fine here
+22:24 <@mulander> only worry is my local ISP dropping the ball
+22:25 <@mulander> DuClare: all signs so far suggest you fixed it
+22:25 < DuClare> I hope I did not introduce any regressions though :)
+22:25 <@mulander> well I doubt your patch made my local ISP cry
+22:25 < DuClare> But gilles will probably spot it at an instant if that's not an appropriate place to always call resume
+22:25 < martin__2> If its fixed. can we have a diff here so we can se what was changes
+22:26 < DuClare> http://guu.fi/g/smtp.patch
+22:26 --- smtp_session.c.old	Thu Jun 15 22:55:50 2017
+22:26 +++ smtp_session.c	Thu Jun 15 22:59:57 2017
+22:26 @@ -1476,7 +1476,8 @@ smtp_data_io(struct io *io, int evt, void *arg)
+22:26  	case IO_LOWAT:
+22:26  		if (s->tx->dataeom && io_queued(s->tx->oev) == 0) {
+22:26  			smtp_data_io_done(s);
+22:26 -		} else if (io_paused(s->io, IO_IN)) {
+22:26 +
+22:26 +		if (io_paused(s->io, IO_IN)) {
+22:26  			log_debug("debug: smtp: %p: filter congestion over: resuming session", s);
+22:26  			io_resume(s->io, IO_IN);
+22:26  		}
+22:26 <@mulander> --- smtp_session.c.old	Thu Jun 15 22:55:50 2017
+22:26 <@mulander> +++ smtp_session.c	Thu Jun 15 22:59:57 2017
+22:26 <@mulander> @@ -1476,7 +1476,8 @@ smtp_data_io(struct io *io, int evt, void *arg)
+22:26 <@mulander>  	case IO_LOWAT:
+22:26 <@mulander>  		if (s->tx->dataeom && io_queued(s->tx->oev) == 0) {
+22:26 <@mulander>  			smtp_data_io_done(s);
+22:26 <@mulander> -		} else if (io_paused(s->io, IO_IN)) {
+22:26 <@mulander> +
+22:26 <@mulander> +		if (io_paused(s->io, IO_IN)) {
+22:26 <@mulander>  			log_debug("debug: smtp: %p: filter congestion over: resuming session", s);
+22:26 <@mulander>  			io_resume(s->io, IO_IN);
+22:26 <@mulander>  		}
+22:26 <@mulander> with note tht the last brace nees to be dropped
+22:27 <@mulander> 9 messages in flight,
+22:27 < DuClare> I updated the diff to fix that already but I'll regen with cvs
+22:27 < DuClare> (That was just diff -uNp on old + fixed file)
+22:28 < DuClare> Updated diff.
+22:28 <@mulander> freel free to paste here
+22:29 < DuClare> Well there's nothing to see but fine
+22:29 < DuClare> Index: usr.sbin/smtpd/smtp_session.c
+22:29 < DuClare> ===================================================================
+22:29 < DuClare> RCS file: /cvs/src/usr.sbin/smtpd/smtp_session.c,v
+22:29 < DuClare> retrieving revision 1.303
+22:29 < DuClare> diff -u -p -r1.303 smtp_session.c
+22:29 < DuClare> --- usr.sbin/smtpd/smtp_session.c       17 May 2017 14:00:06 -0000      1.303
+22:29 < DuClare> +++ usr.sbin/smtpd/smtp_session.c       15 Jun 2017 20:28:12 -0000
+22:29 < DuClare> @@ -1474,9 +1474,10 @@ smtp_data_io(struct io *io, int evt, voi
+22:29 < DuClare>                 break;
+22:29 < DuClare>         case IO_LOWAT:
+22:29 < DuClare> -               if (s->tx->dataeom && io_queued(s->tx->oev) == 0) {
+22:29 < DuClare> +               if (s->tx->dataeom && io_queued(s->tx->oev) == 0)
+22:29 < DuClare>                         smtp_data_io_done(s);
+22:29 < DuClare> -               } else if (io_paused(s->io, IO_IN)) {
+22:29 < DuClare> +
+22:29 < DuClare> +               if (io_paused(s->io, IO_IN)) {
+22:29 < DuClare>                         log_debug("debug: smtp: %p: filter congestion over: resuming session", s);
+22:29 < DuClare>                         io_resume(s->io, IO_IN);
+22:30 < DuClare>                 }
+22:32 <@mulander> 7 in the queue
+22:32 <@mulander> 4 curr connections
+22:32 <@mulander> 2 connections timed out
+22:32 <@mulander> smtp.sessions = 3, in queue 7
+22:33 <@mulander> smtp.sessions = 2, in queue 8
+22:36 <@mulander> smtp.sessions = 2, in queue 7
+22:37 <@mulander> it's bottlenecked on clamav of course
+22:37 < DuClare> Btw
+22:38 < DuClare> Well..
+22:38 <@mulander> smtpctl.sessions = 1, in queue 8
+22:38 <@mulander> smtpctl.sessions = 1, in queue 7
+22:39 < DuClare> I'd like it if you did one more test run using the same version of the source code but without my diff...
+22:39 <@mulander> sure
+22:40 <@mulander> but will start with the 256k one
+22:40 < DuClare> Yeah
+22:41 < DuClare> I'm not entirely sure about the connection between filters and the filter congestion problem on the data io path
+22:41 < DuClare> But there's a somewhat recent commit that could have an effect http://marc.info/?l=openbsd-cvs&m=149546064301428&w=2
+22:42 < DuClare> If it does, then we shouldn't be able to reproduce the on cvs version even if you back out my diff.
+22:43 <@mulander> the CVS code I built was from -rOPENBSD_6_1
+22:44 < DuClare> Oh, ok
+22:44 <@mulander> I can build -current cvs
+22:44 <@mulander> if we want to test on that
+22:44 < DuClare> Yeah I'd like to know about that
+22:45 <@mulander> doas cvs -d anoncvs@anoncvs.spacehopper.org:/cvs up -PAd -rOPENBSD_6_1
+22:45 <@mulander> will try without the -r tag
+22:45 <@mulander> btw
+22:45 <@mulander> 5 messages in flight
+22:45 <@mulander> 0 connections on smtp.sessions
+22:45 <@mulander> so the counter did reset properly.
+22:45 <@mulander> want me first to try the checkout without your diff
+22:46 <@mulander> or checkout of current without your diff?
+22:46 <@mulander> I think it's worth to check whats on disk in case I f-ed up the cvs checkout
+22:46 < DuClare> Checkout current..
+22:46 < DuClare> Yeah I guess
+22:46 < DuClare> Sure
+22:46 < DuClare> If you have time.  I have all the time :)
+22:46 <@mulander> at least for th small files
+22:46 < DuClare> Yea
+22:46 < DuClare> 256k
+22:46 < DuClare> Or something.
+22:47 <@mulander> let's wait for the envelopes to finish
+22:47 <@mulander> or they will skew the result
+22:47 < DuClare> Sure
+22:47 < DuClare> -r on cvs update & checkout is sticky
+22:47 < DuClare> So if you checkout OPENBSD_6_1 once, it'll remember that even if you update without -r
+22:47 <@mulander> yah but -A reses sticky flags
+22:47 <@mulander> or was it -C
+22:47 < DuClare> Ah, right
+22:47 < DuClare> Missed that.
+22:48 <@mulander> yep -A resets sticky
+22:48 < DuClare> Yea
+22:49 <@mulander> 3 in queue
+22:49 <@mulander> 2 that we need to send, the remaining one is my least reply
+22:52 < swankier> hi all
+22:52 < DuClare> Hey swankier
+22:52 < swankier> where are we at in the saga?
+22:52 <@mulander> reversed the diff
+22:52 <@mulander> and recompiling
+22:52 < DuClare> swankier: Figuring out what version of the code to test with. :)
+22:52 < DuClare> And trying everything.
+22:52 <@mulander> swankier: DuClare most likely fixed the bug
+22:52 < swankier> oh wow :)
+22:52 < swankier> grats DuClare
+22:52 < swankier> what was it?
+22:53 < DuClare> 23:16 < DuClare> So the bug seems to be that smtpd runs into filter congestion (high water on data io), if it happens near the very end of a message's
+22:53 < DuClare>                  path through the data io, we end up calling data_io_done without actually resuming the smtp session, as if data io were still busy...
+22:53 < DuClare> 23:17 < DuClare> And the session was paused due to the congestion.
+22:53 < DuClare> 23:17 < DuClare> So we're left with no ongoing data io and a paused session.
+22:53 < swankier> interesting
+22:53 < swankier> the answer is to, of course, test against current.
+22:53 <@mulander> DuClare: that big test finished, no leftover connections, all emails delivered
+22:53 <@mulander> checking with your diff withdrawn
+22:54 <@mulander> so just reverse applied
+22:54 <@mulander> to make sure I don't update anything else
+22:54 < DuClare> swankier: Yeah.  22:26 < DuClare> In hindsight, it think it would've been best to test -current before starting to chase the bug
+22:54 < swankier> I feel like I missed the climax of a movie :)
+22:54 < swankier> oh well.  Next time :)
+22:54 <@mulander> at lest you're in for the cigarette
+22:55 <@mulander> ok, testing 10 small files
+22:55 < DuClare> swankier: There's a small chance that -current isn't affected due to http://marc.info/?l=openbsd-cvs&m=149546064301428&w=2
+22:55 < DuClare> (I don't fully understand the implications of that change)
+22:55 < Niamkik> ~3hours of debugging. that was pretty interesting! :)
+22:57 <@mulander> DuClare: looks like the bug will happen
+22:57 <@mulander> waiting for the timeout
+22:58 < DuClare> Good.  If it does, then update to -current (and hope it compiles)
+22:59 <@mulander> in worst case scenario this could end up as a reliability errata to 6.1
+22:59 < DuClare> Yep
+23:00 <@mulander> there's the timeout
+23:00 <@mulander> it will retry in 138 seconds
+23:00 <@mulander> and I bet we will see a connection stale
+23:00 < DuClare> Right
+23:01 <@mulander> we have to get mwlucas to write an opensmtpd mastery
+23:01 < DuClare> I could swear there was some opensmtpd book done or in the works.  But I might be confusing it with something else.
+23:03 <@mulander> and here's the bug
+23:03 <@mulander> no messages in queue
+23:03 <@mulander> 2 connections hanging
+23:03 < DuClare> Ok
+23:03 < DuClare> Time to check current
+23:03 <@mulander> on it
+23:03 <@fcambus> DuClare: I think gilles@ has a book ongoing
+23:04 <@mulander> current checked out
+23:04 <@mulander> compiling
+23:04 <@mulander> DuClare: freezero :/
+23:04 <@mulander> so new API, no go
+23:05 < DuClare> Maybe you can write a quick wrapper
+23:05 < DuClare> #define freezero(p, len) free(p)
+23:06 <@mulander> trying
+23:06 < DuClare> This is the cool thing about openbsd, they can introduce new stuff and change things and all is ok as long as you keep the system in sync :)
+23:08 <@mulander> compiled with the wrapper
+23:09 < duncaen> https://github.com/libressl-portable/portable/blob/master/crypto/compat/freezero.c
+23:09 <@mulander> running new binary and doing the test
+23:10 <@mulander> 2 messages in flight
+23:11 <@mulander> thik it will error out the same way
+23:11 <@mulander> with your patch I see in the debug output much more frequent pause/resumes
+23:11 <@mulander> the stock current one behaves so far as 6.1
+23:13 <@mulander> connection closed, now waiting for the retry
+23:13 <@mulander> looks like there will be 2 connections hanging
+23:14 < DuClare> Now if somebody could make a regress test for this, we'd be good ;-)  Who's not busy enough (apart from me)
+23:15 < DuClare> Flow control can be a little kinky thing to test though
+23:16 <@mulander> DuClare: reproduced on -current without the patch, 2 connections left hanging.
+23:16 < DuClare> Maybe you can deliver through a pipe to some script/program that deliberately blocks at the right point, long enough to trigger the congestion pause
+23:16 < DuClare> mulander: Cool!
+23:17 <@mulander> DuClare: I'll do a final test with -current + your diff and will call it a day
+23:17 < DuClare> Yup
+23:18 <@mulander> it's running
+23:19 <@mulander> O_o
+23:19 <@mulander> done
+23:19 <@mulander> all 10 emails passed very fast
+23:19 <@mulander> does it increase throughoutput due to better pause/resume handling?
+23:20 <@mulander> will try the larger one
+23:20 <@mulander> 2 meg file
+23:20 <@mulander> 10 * 2mb emails on their way
+23:21 < DuClare> Well at least you have to wait for the connection to timeout if the session hangs.. so yeah that would slow things down quite a bit
+23:22 < DuClare> But I figure clam is still slow to process these files.
+23:22 <@mulander> yeah
+23:22 <@mulander> there are like 3 waiting over 80 seconds now
+23:22 <@mulander> for a 2 meg file
+23:22 <@mulander> but it's much faster than without the diff
+23:22 <@mulander> and it's done.
+23:23 <@mulander> counting delivered emails
+23:23 <@mulander> all 10 delivered
+23:23 <@mulander> 0 hanging connections
+23:23 <@mulander> DuClare: so yep, works on 6.1 + -current
+23:23 <@mulander> bug reproduced on both and fix confirmed on both
+23:24 <@mulander> --- DONE ---
+23:24 < DuClare> Good
+23:24 < DuClare> Good session, I need to grab another cup of coffee

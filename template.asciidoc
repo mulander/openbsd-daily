@@ -1,0 +1,94 @@
+//////////////////////////////////////////////////////////////////////
+OpenBSD Daily, asciidoc writing rules:
+  1. Maximum 70chars/line (set emacs with justification-full)
+  2. All programs names are links to official documentation, set
+     to current release during reading
+  3. All source code files are links to official openbsd webcvs
+     or bxr.su.
+  4. All questions or remarks are quoted at the end of the
+     document.
+  5. Pasted source code or reference to source code are pasted
+     in the document with reference to bxr.su or openbsd webcvs.
+  6. This document need to be easy to read before (source) and after
+     compilation.
+
+Helpers:
+  * {BXR}/path/to/source will generate:
+    http://bxr.su/OpenBSD/path/to/source
+      
+  * {CVS}/path/to/source will generate:
+    https://cvsweb.openbsd.org/cgi-bin/cvsweb/path/to/source
+      
+  * {GITHUB}/path/to/repo will generate:
+    https://github.com/path/to/repo
+//////////////////////////////////////////////////////////////////////
+
+= Topic Name
+:author: mulander
+:authorNick: mulander
+:email: mulander@openbsd.org
+:editor: Mathieu Kerjouan
+:editorNick: niamtokik
+:editorEmail: contact@steepath.eu
+:date: 2017-06-06
+:revision: 2017-06-16
+:copyright: CC-BY-4.0
+:copyrightUrl: https://creativecommons.org/licenses/by/4.0/
+:description: Summary here
+:keywords: Keywords Here
+:originUrl: Link URL
+:source: #openbsd-daily
+:sourceUrl: `irc://irc.freenode.net/{source}`
+:lang: en
+:toc2:
+:icons:
+:data-uri:
+
+:MAN:    https://man.openbsd.org
+:CVS:    https://cvsweb.openbsd.org/cgi-bin/cvsweb
+:BXR:    http://bxr.su/OpenBSD
+:GITHUB: https://github.com
+:GIST:   https://gist.github.com
+
+== License
+
+{copyright}.
+ifdef::copyrightUrl[]
+Full license is available at this URL: {copyrightUrl}.
+endif::copyrightUrl[]
+
+== Acknowledgement
+
+ifdef::author[]
+This document was originaly created ({date}) by {author} a.k.a
+{authorNick} <{email}>.
+endif::[]
+
+ifdef::source[]
+Raw documentation source is available at {originUrl} and was recorded
+from {sourceUrl}.
+endif::source[]
+
+ifdef::editor[]
+This document was edited ({revision}) by {editor} a.k.a {editorNick}
+<{editorEmail}>.
+endif::editor[]
+
+== Summary
+
+{description}
+
+== Content
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+== Annexe A - Questions
+
+=== First Question
+
+[quote, Author]
+______________________________________________________________________
+
+______________________________________________________________________

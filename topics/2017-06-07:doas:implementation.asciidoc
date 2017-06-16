@@ -1,0 +1,229 @@
+= Doas
+:author: mulander
+
+== LICENSE
+
+== NOTES
+
+== find out how persit is implemented and what it would take to add an
+   option echoing out the command to be executed before running it
+
+
+`doas` is rather small, cloc'ing 801 lines of code including the
+parser.  there are 3 distinct grouping for the code:
+
+ * `doas.c`/`doas.h` - assuming main and bulk of the program
+ 
+ * `parse.y` - a parser for the configuration file, like we saw when
+   reading httpd sources
+
+ * `env.c` - quick look makes me think this handles
+   persisting/creating/sanitizing envrionment variables for the
+   commands to be run
+ 
+We will be helping ourself by referencing `doas(1)` and `doas.conf(5)`
+man pages.
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+persist  After the user successfully authenticates, do not
+         ask for a password again for some time.
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+`persist` is part of the options section, a `doas` entry looks like:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+permit|deny [options] identity [as target] [cmd command [args ...]]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Let's see how this is parsed in `parse.y`.  `parse.y` is a yacc file,
+make will run yacc -d on it creating a `y.tab.h`
+
+Let's run the compilation to make sure how this composes
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+yacc -d parse.y
+
+mv y.tab.c parse.c
+
+cc -O2 -pipe  -I/usr/src/usr.bin/doas -Wall \
+   -Werror-implicit-function-declaration  -c parse.c
+   
+cc -O2 -pipe  -I/usr/src/usr.bin/doas -Wall \
+       -Werror-implicit-function-declaration  -c doas.c
+       
+cc   -o doas parse.o doas.o
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Result of running make inside the `doas` folder, there is nothing
+explicit for this encoded in the Makefile so that must be either
+defined in `bsd.prog.mk` or handled by make itself. We search the
+`parse.y` file for occurrences of persist:
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[mulander@napalm doas]$ ag persist parse.y 
+73:%token TNOPASS TPERSIST TKEEPENV TSETENV
+124:                    if (($$.options & (NOPASS|PERSIST)) == (NOPASS|PERSIST)) {
+125:                            yyerror("can't combine nopass and persist");
+139:            } | TPERSIST {
+140:                    $$.options = PERSIST;
+212:    { "persist", TPERSIST },
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+First occurence encodes a rule preventing people combining NOPASS and
+PERSIST.  No complaints there, those options don't make sense
+together.  Redoing the search case insenstive, since tokens are
+capitalized.  We are interested in PERSIST and TPERSIST.  If we were
+to add an option, we would need a new token defined as in L73.  L84
+looks like the start of defining how to parse a single entry in
+`doas.conf`.  L108-117 handles PERMIT/DENY part.  Then we have the
+options in L118.  Looks like $n.options ie. $1.options allows indexing
+into nth parsed option out of a set.  Line 136 defines a single option
+and how it should be parsed.  If we were adding a new one, I think we
+don't need to alter options: in line 118 at all (unless we want to
+exclude a combination like NOPASS|PERSIST did).
+
+19:39 < mulander> and would need to define a new one in the option section, possibly also parsing parameters there if we had any
+19:40 < mulander> next occurrence maps a token to a keyword
+19:41 < mulander>  { "persist", TPERSIST },
+19:41 < mulander> L212
+19:42 < mulander> the rest looks like syntax independant parsing code
+19:42 < mulander> let's try to find where and when doas parses a config file
+19:42 < mulander> jumping to doas.c:main function
+19:43 < mulander> actually, let's search for doas.conf
+19:43 < mulander> this reveals a call to parseconfig in line 341
+19:43 < mulander> parseconfig is defined in the same file
+19:43 < mulander> static void
+19:43 < mulander> parseconfig(const char *filename, int checkperms)
+19:44 < mulander> file is open for reading, informs the user if the file is missing (there is no doas.conf by default)
+19:44 < mulander> then there is permission checking
+19:44 < mulander> I wanted to check why it has that optional
+19:44 < mulander> looks like there is a checkconfig call
+19:45 < mulander> s/call/function
+19:45 < mulander> I assume this is for the -C flag:
+19:45 -!- Irssi: Pasting 5 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+19:45 < mulander>      -C config   Parse and check the configuration file config, then exit.  If
+19:45 < mulander>                  command is supplied, doas will also perform command matching.
+19:45 < mulander>                  In the latter case either `permit', `permit nopass' or `deny'
+19:45 < mulander>                  will be printed on standard output, depending on command
+19:45 < mulander>                  matching results.  No command is executed.
+19:46 < mulander> don't know why this mode doesn't check permissions
+19:46 < mulander> back to parse config.
+19:46 < mulander> there's a call to yyparse(), the file is closed and a single error check
+19:47 < mulander> I assume the config lands in some global tructure
+19:48 < mulander> I go back to the call site in line 341 and quickly scan down to see where an option is used or checked
+19:48 < mulander> the first one I spot is line 360 NOPASS
+19:48 < mulander> it's read from rule->options
+19:48 < mulander> rule has been filled by a call to permit on line 353
+19:49 < mulander> 	if (!permit(uid, groups, ngroups, &rule, target, cmd,
+19:49 < mulander> 	    (const char **)argv + 1)) 
+19:49 < mulander> permit is defined on line 132
+19:49 < mulander> rules are read from a rules array
+19:50 < mulander> which is defined as: extern struct rule **rules; in doas.h
+19:50 < mulander> the actual definition lives in parse.y
+19:50 < mulander> which also defines nrules nad maxrules
+19:51 < mulander> today I learned that doas can only have 64 rules defined
+19:52 < mulander> hmm I just made a file with 65 rules it didn't  complain
+19:53 < mulander> perhaps it's not reported or rules above 64 are just silently ignored
+19:53 < mulander> remember that as a thing to check sometime in the future
+19:53 < mulander> ok, so now we know where the rules live
+19:53 < mulander> let's go back to our main and see how doas actually flows
+19:54 < mulander> and when things happen
+19:54 < mulander> the code starts by efining some paths, variable for flags and parsed options
+19:55 < mulander> the program name is explicitly set to doas
+19:55 < mulander> this might be to avoid someone using an alias to side step syslog
+19:56 < mulander> interesting call to closefrom
+19:56 < mulander>      The closefrom() call deletes all descriptors numbered fd and higher from
+19:56 < mulander>      the per-process file descriptor table.  It is effectively the same as
+19:56 < mulander>      calling close(2) on each descriptor.
+19:56 < mulander> so every file that might have been open is closed by now
+19:56 < mulander> we grab the current users id
+19:56 < mulander> then proceed to regular getopt parsing
+19:58 < mulander> we grab our user from the passwd file
+19:58 < mulander> we extract the username from it
+19:58 < mulander> (of the user executing doas)
+19:59 < mulander> we get grab the group access list for the current user
+19:59 < mulander> and grab the real group id of the calling process
+19:59 < mulander> we grab the SHELL defined in the environment as sh
+19:59 < mulander> if there's none defined we read it from the passwd entry we grabbed
+20:00 < mulander> if the user has no shell doas quitss at this point
+20:00 < mulander> if there's a config path defined in L332 doas will check the config and quit
+20:00 < mulander> this is the -C option handling.
+20:01 < mulander> check the efective user id, quit if we are not suid
+20:01 < mulander> parse the config (we saw this)
+20:01 < mulander> now there's a comment informing us that we are copying what's to be executed for logging purposes
+20:01 < mulander> that's actually quite handy for the option we have been discussing (asking if thi i the commnd we want to execute) so we remember thi
+20:02 < mulander> if we wre to add our option this spot might be good to add it in
+20:02 < mulander> we call permit which finds the rule matching the command the user wants to execute
+20:02 < mulander> we check if authorization is allowed to be skipped
+20:04 < mulander> let's go to authuser as that seems to be where PERSIST is handled
+20:04 < mulander> same file L197
+20:04 < mulander> authuser(char *myname, char *login_style, int persist)
+20:05 < mulander> and here we have the persist handling at the top
+20:05 < mulander> we open /dev/tty in read write
+20:05 < mulander> we call an ioctl on the fd called TIOCCHKVERAUTH
+20:05 < mulander> then skip all the code jumping to the good label if the call returns 0
+20:06 < mulander> the good label calls the ioctl again passing in 5 minutes in second as the argument
+20:06 < mulander> that's enough we need from doas, but let's finish up by reading that ioctl
+20:07 < mulander> searching  the code for  all occurrences of TIOCCHKVERAUTH
+20:07 < mulander> I find one in tty.4, tty_tty.c and ttycom.h
+20:07 < mulander> let's start with the manpage, man tty
+20:07 < mulander> man 4 tty
+20:08 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:08 < mulander>      TIOCSETVERAUTH int secs
+20:08 < mulander>                  Indicate that the current user has successfully authenticated
+20:08 < mulander>                  to this session.  Future authentication checks may then be
+20:08 < mulander>                  bypassed by performing a TIOCCHKVERAUTH check.  The verified
+20:08 < mulander>                  authentication status will expire after secs seconds.  Only
+20:08 < mulander>                  root may perform this operation.
+20:08 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:08 < mulander>      TIOCCLRVERAUTH void
+20:08 < mulander>                  Clear any verified auth status associated with this session.
+20:08 < mulander>      TIOCCHKVERAUTH void
+20:08 < mulander>                  Check the verified auth status of this session.  The calling
+20:08 < mulander>                  process must have the same real user ID and parent process as
+20:08 < mulander>                  the process which called TIOCSETVERAUTH.  A zero return
+20:08 < mulander>                  indicates success.
+20:09 < mulander> now opening up:
+20:09 < mulander> sys/kern/tty_tty.c
+20:09 < mulander> sys/sys/ttycom.h
+20:09 < mulander> the .h file is rather simple
+20:10 < mulander> #define	TIOCSETVERAUTH	_IOW('t', 28, int)	/* set verified auth */
+20:10 < mulander> #define	TIOCCLRVERAUTH	 _IO('t', 29)		/* clear verified auth */
+20:10 < mulander> #define	TIOCCHKVERAUTH	 _IO('t', 30)		/* check verified auth */
+20:10 < mulander> I also now notice that doas didn't call the same ioctl twice, the name was just similar enough that I didn't notice on first read
+20:10 < mulander> let's jump to the code
+20:11 < mulander> all 3 options are handled on L115  to L144 in tty_tty.c
+20:12 < mulander> I don't know what zapverauth does and suser
+20:12 < mulander> the rest of the code is rather simple, stores user ids in a structure
+20:12 < mulander> called a session
+20:13 < mulander> and there's timeout handling calls present which are documented
+20:13 < mulander> can't find a manpage for both zapverauth and suser, let's find those functions
+20:14 < mulander> it's defined in sys/kern/kern.proc.c
+20:14 < mulander> huh
+20:14 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:14 < mulander> void
+20:14 < mulander> zapverauth(void *v)
+20:14 < mulander> {
+20:14 < mulander> 	struct session *sess = v;
+20:14 < mulander> 	sess->s_verauthuid = 0;
+20:14 < mulander> 	sess->s_verauthppid = 0;
+20:14 < mulander> }
+20:14 < mulander> much less than I expected
+20:15 < mulander> suser lives in sys/kern/kern_prot
+20:15 < mulander>  * Test whether this process has special user powers.
+20:15 < mulander>  * Returns 0 or error.
+20:15 < mulander>  */
+20:15 < mulander> so mistery solved
+20:16 < mulander> so this will only be set after elevating privileges
+20:16 < mulander> a call to set ver auth would bail out with an error without it.
+20:16 < mulander> also the amount of seconds that can be waited on is limited
+20:16 < mulander> from 1 up to 3600 seconds
+20:17 < mulander> and that's it, I consider the goal reached
+20:18 < mulander> to add our option we would have to edit parse.y as discussed, read our parsed option after the rule for the command has been acquired
+20:18 < mulander> so passed L358 when permit() returns the rule
+20:19 < mulander> and we would use cmdline (which doas itself uses in L390 to print to syslog) to prompt the user
+20:19 < mulander> --- DONE ---
