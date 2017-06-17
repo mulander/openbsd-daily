@@ -1,0 +1,72 @@
+20:00 [Users #openbsd-daily]
+20:00 [@akfaew        ] [ brtln       ] [ erethon      ] [ lk23789k23] [ qbit[m]  ] [ tarug0       ] 
+20:00 [@dlg           ] [ bruflu      ] [ fcbsd        ] [ lteo[m]   ] [ quinq    ] [ tdjones      ] 
+20:00 [@fcambus       ] [ brynet      ] [ filwishe1    ] [ lucias    ] [ rabbitear] [ tdmackey     ] 
+20:00 [@mikeb         ] [ cengizIO    ] [ g0relike     ] [ luisbg    ] [ rain1    ] [ Technaton    ] 
+20:00 [@mulander      ] [ commandoline] [ geetam       ] [ mandarg   ] [ rajak    ] [ thrym        ] 
+20:00 [@t_b           ] [ corbyhaas   ] [ ggg_         ] [ mattl     ] [ rEv9     ] [ ticoit       ] 
+20:00 [ __gilles[away]] [ davl        ] [ ggg`         ] [ metadave  ] [ rgouveia ] [ timclassic   ] 
+20:00 [ acidfoo-_     ] [ deei        ] [ ghostyy      ] [ mikeputnam] [ rnelson  ] [ TronDD       ] 
+20:00 [ administraitor] [ Dhole       ] [ ghugha       ] [ mpts      ] [ ryan     ] [ TuxOtaku     ] 
+20:00 [ akkartik      ] [ dmfr        ] [ harrellc00per] [ Naabed-   ] [ S007     ] [ Vaelatern    ] 
+20:00 [ antoon_i      ] [ dostoyesvky ] [ Harry        ] [ nacci     ] [ scadu    ] [ vbarros      ] 
+20:00 [ antranigv     ] [ Dowzee      ] [ IcePic       ] [ nacelle   ] [ selckin  ] [ vyvup        ] 
+20:00 [ ar            ] [ DrPete      ] [ jbernard     ] [ nailyk    ] [ SETW     ] [ whyt         ] 
+20:00 [ asie          ] [ dsp         ] [ jonbryan     ] [ Niamkik   ] [ sgnorptz ] [ Wilawar      ] 
+20:00 [ azend|vps     ] [ DuClare     ] [ jsing        ] [ noexcept_ ] [ skizye   ] [ wilornel     ] 
+20:00 [ babasik122    ] [ duncaen     ] [ kAworu       ] [ oldlaptop ] [ skrzyp   ] [ wodim        ] 
+20:00 [ bcd           ] [ dxtr        ] [ kittens      ] [ owa       ] [ smiles`  ] [ WubTheCaptain] 
+20:00 [ bch           ] [ eau         ] [ kl3          ] [ petrus_lt ] [ Soft     ] [ xor29ah      ] 
+20:00 [ benpicco      ] [ ebag        ] [ kpcyrd       ] [ phy1729   ] [ stateless] [ zelest       ] 
+20:00 [ biniar        ] [ electricto4d] [ kraucrow     ] [ polishdub ] [ stsp     ] [ zyklon       ] 
+20:00 [ brianpc       ] [ emigrant    ] [ kysse        ] [ poptart   ] [ sunil    ] 
+20:00 [ brianritchie  ] [ entelechy   ] [ landers2     ] [ qbit      ] [ swankier ] 
+20:00 -!- Irssi: #openbsd-daily: Total of 130 nicks [6 ops, 0 halfops, 0 voices, 124 normal]
+20:00  * mulander passes the mic to duncaen 
+20:01 < duncaen> -- code read: generic vga pci device driver --
+20:02 < duncaen> I have choosen the VGA driver because I'm new to the kernel and i thought it is an easy entry point
+20:02 < duncaen> I have already looked into it a bit and learned a bit
+20:03 < duncaen> First I choosed the VGA driver because I thought I can simply add a method to mmap the memory in userspace to have direct access to the framebuffer
+20:04 < duncaen> But this is not possible, the vga driver just implements VGA and not VBE or VESA which would allow full access to the graphic though shared memory
+20:04 < duncaen> VGA can operate in different modes, but those are all text modes and they change just the resolution and the number of available colors
+20:06 < brynet> vga(4) just uses the text mode setup by the BIOS, there were a few people that were tackling VBE in the bootloader, but EFI made that easier with efifb(4).
+20:07 < duncaen> There was a vesa device which was removed 2015 and was already broken for 7 years before it was removed
+20:07 < duncaen> http://theapt.org/~mike/vesa.diff
+20:08 < duncaen> s/broken/not enabled in default kernels
+20:09 < duncaen> So openbsd has wscons(4) which is responsible to provide a console
+20:10 < duncaen> those consoles can be provided over different devices
+20:12 < duncaen> serial consoles, vga and other framebuffer devices
+20:12 -!- martin__ is now known as martin__2
+20:15 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c
+20:16 < duncaen> I'm new to this, I would say this is the main part of the vga driver
+20:17 < duncaen> and then there is https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pci.c which overwrites some of the functions from vga.c
+20:20 < duncaen> Lets start with the vga_pci_match function https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pci.c#L175
+20:21 < duncaen> this function is used to test if the given device is a vga-pci device
+20:22 < duncaen> the function returns 0 if the driver does not work for the given device
+20:23 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pcivar.h#L34
+20:24 < duncaen> the first check checks the pci class and subclass
+20:25 < duncaen> /* check whether it is disabled by firmware */
+20:28 < duncaen> Ok this is a PCI feature
+20:29 < duncaen> http://wiki.osdev.org/PCI#PCI_Device_Structure
+20:31 < duncaen> the next check vga_is_console is defined in vga.c lets skip this for now
+20:35 < duncaen> lets skip this file, I cant find anything interesting
+20:35 < duncaen> Im looking now at https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c
+20:38 < DuClare> Hi weezelding
+20:41 < duncaen> Ok i have a hard time to find a nice entry point, lets look how fonts are loaded and set, starting at wsfontload(8)
+20:48 < duncaen> https://github.com/openbsd/src/blob/master/usr.sbin/wsfontload/wsfontload.c
+20:50 < weezelding> g'day DuClare
+20:51 < weezelding> or evening actually
+20:51 < duncaen> It uses the WSDISPLAYIO_LDFONT ioctl with a wsdisplay_font structure which holds some extra info like width and height and a .data field which is the content of the choosen font file
+20:52 < duncaen> the WSDISPLAYIO_LDFONT ioctl is handled in https://github.com/openbsd/src/blob/master/sys/dev/wscons/wsdisplay.c#L1304
+20:53 < duncaen> it checks if the screen supports loading fonts
+20:53 < duncaen> VGA supports it, a serial console wouldnt
+20:54 < duncaen> then it uses the font settings to calculate the length of the buffer
+21:00 < duncaen> Ok i was wondering why there are not more checks to verify the font size matches the given buffer, i tried to load sone font file with a different size
+21:00 < duncaen> but ioctl only return EINVAL
+21:00 < duncaen> I looked at the vga load_font function whcih is called from wdsisplay.c
+21:00 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c#L856
+21:03 < duncaen> ok this is boring too, the fonts are already in the right format for vga
+21:04 < brynet> :)
+21:04 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga_subr.c#L82
+21:04 < duncaen> they are just written byte by byte to the pci bus
+21:05 < duncaen> -- code read: abort --

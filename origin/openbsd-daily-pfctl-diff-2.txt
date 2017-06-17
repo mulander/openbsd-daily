@@ -1,0 +1,827 @@
+21:30 [Users #openbsd-daily]
+21:30 [@akfaew        ] [ brianpc     ] [ emigrant     ] [ kysse     ] [ poptart  ] [ swankier     ] 
+21:30 [@dlg           ] [ brianritchie] [ entelechy    ] [ landers2  ] [ qbit     ] [ tarug0       ] 
+21:30 [@fcambus       ] [ bruflu      ] [ erethon      ] [ lk23789k23] [ quinq    ] [ tdmackey     ] 
+21:30 [@mikeb         ] [ brynet      ] [ fcbsd        ] [ lucias    ] [ rabbitear] [ Technaton    ] 
+21:30 [@mulander      ] [ cengizIO    ] [ filwishe1    ] [ luisbg    ] [ rain1    ] [ thrym        ] 
+21:30 [@t_b           ] [ commandoline] [ g0relike     ] [ mandarg   ] [ rajak    ] [ ticoit       ] 
+21:30 [ __gilles[away]] [ corbyhaas   ] [ ggg_         ] [ mattl     ] [ rEv9     ] [ TronDD       ] 
+21:30 [ acidfoo-_     ] [ davl        ] [ ggg`         ] [ metadave  ] [ rgouveia ] [ TuxOtaku     ] 
+21:30 [ administraitor] [ deei        ] [ ghostyy      ] [ mikeputnam] [ rnelson  ] [ Vaelatern    ] 
+21:30 [ akkartik      ] [ Dhole       ] [ ghugha       ] [ mpts      ] [ ryan     ] [ vbarros      ] 
+21:30 [ antoon_i      ] [ dmfr        ] [ harrellc00per] [ Naabed-   ] [ S007     ] [ viq          ] 
+21:30 [ antranigv     ] [ dostoyesvky ] [ Harry        ] [ nacci     ] [ scadu    ] [ vyvup        ] 
+21:30 [ apotheon      ] [ Dowzee      ] [ IcePic       ] [ nacelle   ] [ selckin  ] [ weezelding   ] 
+21:30 [ ar            ] [ DrPete      ] [ jbernard     ] [ nailyk    ] [ sgnorptz ] [ whyt         ] 
+21:30 [ asie          ] [ dsp         ] [ jonbryan     ] [ Niamkik   ] [ skizye   ] [ wilornel     ] 
+21:30 [ azend|vps     ] [ DuClare     ] [ jsing        ] [ noexcept_ ] [ skrzyp   ] [ wodim        ] 
+21:30 [ babasik122    ] [ duncaen     ] [ kAworu       ] [ oldlaptop ] [ smiles`  ] [ WubTheCaptain] 
+21:30 [ bcd           ] [ dxtr        ] [ kittens      ] [ owa       ] [ Soft     ] [ xor29ah      ] 
+21:30 [ bch           ] [ eau         ] [ kl3          ] [ petrus_lt ] [ stateless] [ zelest       ] 
+21:30 [ benpicco      ] [ ebag        ] [ kpcyrd       ] [ phy1729   ] [ stsp     ] [ zyklon       ] 
+21:30 [ biniar        ] [ electricto4d] [ kraucrow     ] [ polishdub ] [ sunil    ] 
+21:30 -!- Irssi: #openbsd-daily: Total of 125 nicks [6 ops, 0 halfops, 0 voices, 119 normal]
+21:30 <@mulander> --- code read: finishing up our pfctl diffs ---
+21:31 <@mulander> *** goal: rain1 here submitted a nice pfctl diff https://marc.info/?t=149719001300001&r=1&w=2 that got tested and OK'ed
+21:31 <@mulander> *** which was not yet contributed as more code possible to refactor was identified
+21:32 <@mulander> *** we will commit rain1 diff and finish up the rainy day patch we made based on the feedback we got on list and from mikeb here
+21:32 <@mulander> ***
+21:33 <@mulander> first of all, let's get changes from rain1 committed so the remaining bit will be our additions
+21:34 <@mulander> the diff https://marc.info/?l=openbsd-tech&m=149718996106760&w=2
+21:34 <@mulander> since it's been almost a week, I'm going to re-apply this change on a fresh checkout of /usr/src/sbin/pfctl
+21:35 <@mulander> just in case enough code changed to make this conflict
+21:36 <@mulander> no changes since my last checkout (ran cvs -q up -Pad in that directory)
+21:36 <@mulander> applying the patch: patch -p0 < rain1.diff
+21:36 <@mulander> all clean.
+21:36 <@mulander> compiling
+21:37 <@mulander> all clean.
+21:37 <@mulander> now, we were pointed at a regress test suite for pfctl
+21:37 <@mulander> this is what stopped the rainy day diff, but before doing any commits let's make sure this diff passes.
+21:38 <@mulander> first installing the modified pfctl system wide with doas make install
+21:38 <@mulander> the regress suite for pfctl is in /usr/src/regress/sbin/pfctl
+21:39 <@mulander> I cd there and again do a clean cvs checkout in case something wa updated with cvs -q up -Pad
+21:39 < DuClare> What does -a do with cvs up?
+21:39 <@mulander> *-PAd
+21:39 <@mulander> typo, but -A resets any sticky flags
+21:39 < DuClare> Aight
+21:40 <@mulander> it's an easy mistake to go to a directory that was previously updated to a branch with -rOPENBSD_6_1 or -r1.35 rev num
+21:40 < DuClare> Yup.  If you follow stable..  :-)
+21:40 <@mulander> DuClare: or test errata on previous checkouts
+21:40 < DuClare> Right.
+21:41 <@mulander> I ran this test suite before, but usually one should start by reading the Makefile in that folder
+21:44 <@mulander> running just make in that folder.
+21:44 <@mulander> with elevated privileges
+21:44 <@mulander> the result is all test passing and the suite exiting with a 0 code
+21:44 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:44 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+21:44 <@mulander> rules cleared
+21:44 <@mulander> pfctl: Anchor or Ruleset does not exist.
+21:44 <@mulander> /usr/bin/doas ifconfig lo1000000 destroy
+21:44 <@mulander> /usr/bin/doas ifconfig tun1000000 destroy
+21:44 <@mulander> /usr/bin/doas ifconfig tun1000001 destroy
+21:44 <@mulander> # echo $?
+21:44 <@mulander> 0
+21:44 <@mulander> ---
+21:44 <@mulander> ^ pasting just the few last lines
+21:45 <@mulander> we know this diff has been around for a while, tb@ tested it initially, then mikeb@ had a look - both OK'ed the change
+21:45 <@mulander> so we can safely commit this to the tree
+21:48 <@mulander> I'm preparing the commit message and doing a final review of the diff line by line
+21:56 <@mulander> final check before commit - cvs -qn up
+21:56 <@mulander> shows what files are modified without touching anything (dry run)
+21:56 <@mulander> just pfctl.c - nice way to catch if you modified something locally by accident
+21:57 <@mulander> ok, committing
+22:00 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 6 | Channel rules: https://ptpb.pw/cnx1 | Next: duncaen: generic vga pci device - 18:00 UTC / mulander: pfctl patch continued - after duncaen
+22:00 <@mulander> will post the marc.info link as soon as it catches up
+22:00 <@mulander> now, for our remaining changes
+22:01 <@mulander> first let's apply what we had and see why we didn't commit it yet
+22:03 <@mulander> https://junk.tintagel.pl/openbsd-daily-pfctl-1.diff this is our diff from the previous pfctl session
+22:03 <@mulander> short summary of what it did can be seen here:
+22:03 <@mulander> https://marc.info/?l=openbsd-tech&m=149730079132344&w=2
+22:03 <@mulander> (marc.info for todays commit: https://marc.info/?l=openbsd-cvs&m=149764315926514&w=2)
+22:05 <@mulander> first, let's rebase the diff on the changes we just committed
+22:08 <@mulander> https://junk.tintagel.pl/openbsd-daily-pfctl-2.diff
+22:08 <@mulander> now, time to recompile and to run the regress test, to see why we did not commit yet
+22:09 <@mulander> so make, doas make install
+22:10 <@mulander> and running make in the regress test
+22:10 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:10 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+22:10 <@mulander> rules cleared
+22:10 <@mulander> pfctl: Anchor or Ruleset does not exist.
+22:10 <@mulander> pfctl: pfctl_clear_tables: Anchor or Ruleset does not exist
+22:10 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+22:10 <@mulander> FAILED
+22:10 <@mulander> *** Error 1 in target 'regress' (ignored)
+22:10 <@mulander> 1. we see the double error reporting which mikeb@ pointed out
+22:10 <@mulander> 2. the regress explicitly exited with an error
+22:12 <@mulander> let's look at this tests data
+22:12 <@mulander> # cat pfcmd1.in                                                                                                                                                                                 
+22:12 <@mulander> pass
+22:13 <@mulander> # cat pfcmd1.ok                                                                                                                                                                                 
+22:13 <@mulander> # 
+22:13 <@mulander> # cat pfcmd1.opts                                                                                                                                                                               
+22:13 <@mulander> -a regress/does_not_exist -Fa
+22:13 <@mulander> #
+22:15 <@mulander> now the Makefile states
+22:15 <@mulander> # pfcmd: test pfctl command line parsing
+22:16 <@mulander> not sure yet if the tests fail due to the differing exit code or the output
+22:17 <@mulander> output is not present in the pfcmd1.* files, so it must be the exit code
+22:17 <@mulander> and there appreas to be only a single pfcmd test.
+22:17 <@mulander> for that specific option only.
+22:20 <@mulander> first let's take care of our double reporting
+22:21 <@mulander> we added that in pfctl_table.c
+22:21 <@mulander>  13 void                                                                                                                                                                                         
+22:21 <@mulander>  12 pfctl_clear_tables(const char *anchor, int opts)                                                                                                                                             
+22:21 <@mulander>  11 {                                                                                                                                                                                            
+22:21 <@mulander>  10         if (pfctl_table(0, NULL, NULL, "-F", NULL, anchor, opts) == -1)                                                                                                                      
+22:21 <@mulander>   9                 errx(1, "pfctl_clear_tables: %s", pfr_strerror(errno));
+22:21 <@mulander> and similarly in the other functions
+22:22 <@mulander> the unmodified pfctl does report those errors but does not terminate with a non 0 exit code
+22:23 <@mulander> we know the pfr_strerror was called in radix_perror (from our last reading)
+22:24 <@mulander> and that code was called from the RVTEST macro in pfctl_table.c
+22:24 <@mulander> which in turn is used in every branch of pfctl_table function
+22:24 <@mulander> that is used as the basis of all other operations like pfctl_clear_tables
+22:27 <@mulander> radix_perror does a fprintf to stderr but does not terminate
+22:27 <@mulander> as we discussed with mikeb@ we want commands resulting in an error to terminate with a non zero code
+22:27 <@mulander> but without double reporting
+22:28 <@mulander> since we already report, all we need to do is drop printing the error and just terminating with a non zero exit code
+22:28 <@mulander> so we turn our
+22:29 <@mulander> errx(1, "pfctl_show_tables: %s", pfr_strerror(errno));
+22:29 <@mulander> into exit(1)
+22:30 <@mulander> noting one thing, that I am not yet sure
+22:30 <@mulander> pfctl_show_ifaces - does it print the double error?
+22:30 <@mulander> and this one is interesting
+22:31 <@mulander> if we look in my email that contained tests from the modified kernel
+22:31 <@mulander> https://marc.info/?l=openbsd-tech&m=149730079132344&w=2
+22:31 <@mulander> we can compare stock to modified
+22:31 <@mulander> we can see all branches resulting in double error except -sI
+22:31 <@mulander> we can see the modified binary exiting early with a single error we reported
+22:32 <@mulander> whereas the stock binary reported the error also
+22:32 <@mulander> so we must have stopped an error reporting code path from executing
+22:33 <@mulander> let's follow the code
+22:33 <@mulander> http://bxr.su/OpenBSD/sbin/pfctl/pfctl_table.c#598
+22:33 <@mulander> ah, now our memory is refreshed
+22:34 <@mulander> http://bxr.su/OpenBSD/sbin/pfctl/pfctl_table.c#610
+22:34 <@mulander> we replaced an existing radix_perror call with our bail out
+22:34 <@mulander> so in this case we can remain unmodified
+22:35 <@mulander> but let's keep reporting consistent
+22:35 <@mulander> and instead of doing our errx we will call radix_perror and exit with 1
+22:36 <@mulander> I'm recompiling the change, installing it on my system and re-running the regress
+22:37 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:37 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+22:37 <@mulander> rules cleared
+22:37 <@mulander> pfctl: Anchor or Ruleset does not exist.
+22:37 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+22:37 <@mulander> FAILED
+22:37 <@mulander> *** Error 1 in target 'regress' (ignored)
+22:37 <@mulander> # echo $?
+22:37 <@mulander> 0
+22:38 <@mulander> ok, now it would be nice to know how the regress works
+22:40 < DuClare> Pretty sure it's the exit code
+22:41 < DuClare> As usual with make
+22:41 < DuClare> If a command fails, that's an error
+22:41 <@mulander> yeah but I assume we have to alter the regress
+22:41 <@mulander> as that's the desired behavior
+22:41 < DuClare> Yup
+22:41 <@mulander> so I'm looking for the convention
+22:41 -!- Irssi: Pasting 10 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:41 <@mulander> # TARGETS
+22:41 <@mulander> # pf: feed pfNN.in through pfctl and check whether the output matches pfNN.ok
+22:41 <@mulander> # selfpf: feed pfctl output through pfctl again and verify it stays the same
+22:41 <@mulander> # pfail: invalid rulesets pfctl must reject; pfailNN.in and pfailNN.ok
+22:41 <@mulander> # pfsetup: set up lo1 and perform more tests
+22:41 <@mulander> # pfr: table tests
+22:41 <@mulander> # pfsimple: just check whether pfctl accepts a given ruleset, not checking output
+22:41 <@mulander> # pfload: load ruleset into anchor regress and verify pfctl -vvsr
+22:41 <@mulander> # pfoptimize: as pfload, with -o flag to pfctl
+22:41 <@mulander> # pfopt: as target pf, but supply extra command line options
+22:41 <@mulander> # pfcmd: test pfctl command line parsing
+22:42 < DuClare> I don't know if there is one for things that are supposed to fail with an exit code
+22:42 <@mulander> pfcmd has literally this single test
+22:42 <@mulander> the definition of this test group suggests that it's supposed to ok parsing the command set
+22:42 <@mulander> not exactly speaking that it needs to result in a 0 exit code
+22:42 < DuClare> Right
+22:43 <@mulander> I see fail targets
+22:44 <@mulander> they diff the stderr + stdin with the expected output
+22:44 <@mulander> pfail${n}:
+22:44 <@mulander>         pfctl -o none -nv -f - < ${.CURDIR}/pfail${n}.in 2>&1 | \
+22:44 <@mulander>             diff -u ${.CURDIR}/pfail${n}.ok /dev/stdin
+22:44 <@mulander> this ignores the commands exit code
+22:45 <@mulander> so I'm wondering if this rule shoul dbe migrated to a pfailN
+22:46 < DuClare> It's not so much about rulesets though
+22:46 < DuClare> # pfail: invalid rulesets pfctl must reject; pfailNN.in and pfailNN.ok
+22:46 <@mulander> right
+22:46 < DuClare> In fact that group doesn't even work
+22:47 < DuClare> Since it's using specific command line flags
+22:47 <@mulander> so it would need a new group pfcmd and pfcmdfail?
+22:47 < DuClare> And testing command line parsing we obviously don't want those
+22:47 < DuClare> Yeah but as long as nobody's adding more commands to the group, I don't think it's useful to pretend it's a group
+22:47 <@mulander> yep
+22:48 < DuClare> Alternatively..
+22:48 <@mulander> alternatively we could create an -a anchor
+22:48 <@mulander> and then test the command
+22:48 <@mulander> which should not fail
+22:48 < DuClare> We could ignore errors on command line parsing, but redirect stderr to stdout and expect the output to contain error messages
+22:48 < DuClare> Yes that is an option too
+22:48 < DuClare> It is right to question the validity of the test :)
+22:48 <@mulander> let's see when it was added.
+22:49 <@mulander> https://github.com/openbsd/src/commit/3158f0adb7509352a3c3556d21756e8447f0edb9
+22:49 <@mulander> 7 years ago
+22:50 <@mulander> so perhaps not likely as something that really occurred in the wild
+22:50 <@mulander> I am leaning towards the best route being asking on the list
+22:50 <@mulander> what the pfcmd group is for and how we should handle it when the tool assumes to return an error on execution even if the parsing is valid.
+22:51 <@mulander> DuClare: agreed?
+22:52 < DuClare> Well I mean I don't suppose there's some big deep meaning to the group
+22:52 < DuClare> So I'd just fix the test to do something useful, or change the group to reflect the test better, and propose that
+22:53 <@mulander> ok, changing it to redirect stdout/stderr and testing feedback containing the errors sounds reasonable then
+22:53 < DuClare> Basically I try to take action and not waste others time asking for what to do if it's not obvious there's some bigger plan
+22:53 < DuClare> If someone wants to add more tests into that category, the problem can be revisited
+22:54 < DuClare> It's not a big deal
+22:56 < DuClare> So stderr tells that the anchor doesn't exist.  But it doesn't throw up usage or complain about the syntax parsing an argument.  That means option parsing was ok.
+22:58 < DuClare> You could change it to add the anchor and see if that works out neater
+22:59 < DuClare> In the general case, throwing away the error code and relying on stderr alone has one problem: its meaning could change if some path is changed to exit early rather than just printing the error and moving on
+23:00 <@mulander> first run after initial change but not changing input/outputs
+23:00 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+23:00 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in 2>&1 |  diff -u /usr/src/regress/sbin/pfctl/pfcmd1.ok /dev/stdin
+23:00 <@mulander> --- /usr/src/regress/sbin/pfctl/pfcmd1.ok       Sat Jul  3 04:32:45 2010
+23:00 <@mulander> +++ /dev/stdin  Fri Jun 16 23:00:13 2017
+23:00 <@mulander> @@ -0,0 +1,2 @@
+23:00 <@mulander> +rules cleared
+23:00 <@mulander> +pfctl: Anchor or Ruleset does not exist.
+23:00 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+23:00 <@mulander> FAILED
+23:00 <@mulander> *** Error 1 in target 'regress' (ignored)
+23:00 <@mulander> will now add the expected output to the ok
+23:02 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+23:02 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in 2>&1 |  diff -u /usr/src/regress/sbin/pfctl/pfcmd1.ok /dev/stdin
+23:02 <@mulander> /usr/bin/doas ifconfig lo1000000 destroy
+23:02 <@mulander> /usr/bin/doas ifconfig tun1000000 destroy
+23:02 <@mulander> /usr/bin/doas ifconfig tun1000001 destroy
+23:02 <@mulander> # echo $?
+23:02 <@mulander> 0
+23:02 <@mulander> clean pass.
+23:04 <@mulander> https://junk.tintagel.pl/pfctl-regress.diff
+23:04 <@mulander> our regress diff
+23:04 <@mulander> DuClare: please take a look
+23:06 <@mulander> our final diff for pfctl: https://junk.tintagel.pl/openbsd-daily-pfctl-3.diff
+23:07 <@mulander> OK, think it's time to wrap up - I will gather this up into a small email to tech proposing our change
+23:07 <@mulander> thanks for participating!
+23:07 <@mulander> --- DONE ---
+23:08 < DuClare> I'd try add the anchor maybe
+23:08 < DuClare> So we can get a clean exit
+23:08 < DuClare> That's probably better in the long run
+00:06 <@mulander> duncaen: let me know if you want to take over as a solo read, I have been eating into your slots 3 days in a row
+00:06 <@mulander> and obviously wouldn't mind a free evening ;)
+00:08 < duncaen> have to find something nice to read which gets me motivated :D
+00:08 < DuClare> I need to write a little tool
+00:08 < DuClare> (dexhump)
+00:09 < DuClare> Reverse hexdump, take ascii in and spit a binary out..
+00:12 < duncaen> hm cant hexdump do this too?
+00:12 < DrPete> xxd -r -p?
+00:13 < DuClare> I'm not gonna install xxd (vim?)
+00:13 < DrPete> i believe so, yeah
+00:13 < DuClare> Also I might need a feature or three on top of that basic functionality :)
+00:13 < DrPete> fair
+00:13 <@mikeb> duncaen: hvs(4) :-)
+00:14 < DuClare> So I might want to interleave the hex with some decimal words that the tool will convert according to the specified endianess
+00:15 < DuClare> And have the ability to specify a padding byte (or a pattern?) for the unspecified parts in a sparse file
+00:15 < DuClare> Like, hexdump normally omits long sequences of NUL
+00:15 < DuClare> The ascii description might have such omissions but the byte could be something other than NUL.
+00:16 <@mikeb> mulander: what's with that regress test?
+00:16 <@mulander> mikeb: the pfctl one?
+00:17 < duncaen> hm mikeb is there a way to play around with it without hyper-v?
+00:17 <@mikeb> mulander: yeah
+00:18 <@mikeb> duncaen: azure :-)
+00:18 <@mikeb> nah, i guess not
+00:18 <@mulander> mikeb: I' not sure how to move forward with this, there is an explicit test for the anchor expecting the binary not to die.
+00:18 <@mulander> so with the initial diff (the one without the rainy day changes) - passes all regress
+00:18 <@mikeb> pfctl regress tests just assert some agreed functionality
+00:18 <@mulander> the new diff fails on that one
+00:19 <@mikeb> is there a return value change?
+00:19 <@mikeb> the ugly pfctl_* string has to go
+00:20 <@mikeb> pfctl: Anchor or Ruleset does not exist.
+00:20 <@mikeb> pfctl: pfctl_clear_tables: Anchor or Ruleset does not exist
+00:20 <@mikeb> is this coming from the patched binary or not?
+00:21 <@mulander> yes from the patched binary
+00:21 <@mulander> the additional errx(1
+00:21 <@mikeb> why did you add the double error?
+00:23 <@mikeb> we shouldn't print the error message twice
+00:23 <@mikeb> the first one (w/o the function name) is enough
+00:24 <@mulander> I'm checking logs from here to recall
+00:25 <@mikeb> i can tell you more: pfctl is the tool for the user
+00:25 <@mikeb> so clear error messages are a priority here
+00:26 <@mikeb> pfctl right now is an underperformer in the usability challange
+00:27 <@mulander> so initially I unnaccounted for the fact that most errors are already reported on the core table manipulating function
+00:27 <@mulander> the exit codes do change, as none of those functions previously resulted in a non zero exit
+00:29 <@mikeb> errors should not result in zero exit codes
+00:31 <@mulander> ok so for going forwards, make sure I don't double report and fix regress if it fails because of 0 exit being expected
+00:31 <@mikeb> commit the first diff
+00:31 <@mikeb> and then see what can be done with errors
+00:32 <@mikeb> or find somebody to do it :-)
+00:32 <@mulander> I'll follow through with it :)
+00:33 <@mulander> thanks for bringing it up, I was not sure in which way to continue
+00:34 <@mulander> as for the first diff that's the one @t_b and you OK'ed - I'll commit that tomorrow morning and will try to find some time to clear up the rainy day diff
+00:37 <@t_b> cool, time to increase that commits counter again :)
+00:40 < duncaen> hm crypt_newhash has "blowfish,8" as default, the default localcipher in login.conf depends on the architecture
+00:47 < duncaen> hm crypt_newhash(3) does not document that there is a default set if pref is NULL
+00:48 <@mulander> duncaen: akfaew has been attempting to document that if I recall correctly
+00:48 <@mulander> let me link the thread
+00:48 <@mulander> https://marc.info/?t=149677112300004&r=1&w=2
+00:49 <@mulander> https://marc.info/?l=openbsd-tech&m=149677962008191&w=2
+00:49 <@mulander> and his diff https://marc.info/?l=openbsd-tech&m=149677658307127&w=2
+00:49 <@mulander> there are some other replies that pull in info on why it's that way
+00:50 <@mulander> ie. from tedu here https://marc.info/?l=openbsd-tech&m=149740401627729&w=2
+00:51 < duncaen> ah thanks, just recently subscribed to tech@ should have searched in the archive
+16:11 < duncaen> does not every vga driver support the wsdisplay framebuffer stuff or do I do something wrong?
+16:13 < IcePic> not all x86 gfx setups support framebuffer, that is correct
+16:37 <@mulander> o/
+16:37 < DuClare> Hi
+16:40 < eau> hoi
+16:40 <@mulander> duncaen: so, planning a read for today?
+16:41 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 5 | Channel rules: https://ptpb.pw/cnx1 | Next: 2017.06.13 / duncaen: rebound - 19:30 UTC / mulander: pfctl patch continued - 18:00 UTC
+16:41 < duncaen> maybe the generic vga pci device :(
+16:41 <@mulander> that sounds in teresting
+16:42 <@mulander> want the 18:00 slot? I would like to delay mine to late evening
+16:43 < duncaen> ok
+16:43 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 5 | Channel rules: https://ptpb.pw/cnx1 | Next: 2017.06.13 / duncaen: generic vga pci device - 18:00 UTC / mulander: pfctl patch continued - after duncaen
+16:44 <@mulander> thanks for taking the spot! :)
+16:55 < rgouveia> seems the date is wrong on the topic ? still says 13
+16:55 < DuClare> Yep, it's said that for a few days now
+16:56 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 5 | Channel rules: https://ptpb.pw/cnx1 | Next: duncaen: generic vga pci device - 18:00 UTC / mulander: pfctl patch continued - after duncaen
+16:56 <@mulander> thanks for pointing out rgouveia 
+16:56 <@mulander> think it's not needed as we are doing this every day anyways
+17:09 [Users #openbsd-daily]
+17:09 [@akfaew        ] [ brtln       ] [ erethon      ] [ lk23789k23] [ qbit[m]  ] [ tarug0       ] 
+17:09 [@dlg           ] [ bruflu      ] [ fcbsd        ] [ lteo[m]   ] [ quinq    ] [ tdjones      ] 
+17:09 [@fcambus       ] [ brynet      ] [ filwishe1    ] [ lucias    ] [ rabbitear] [ tdmackey     ] 
+17:09 [@mikeb         ] [ cengizIO    ] [ g0relike     ] [ luisbg    ] [ rain1    ] [ Technaton    ] 
+17:09 [@mulander      ] [ commandoline] [ geetam       ] [ mandarg   ] [ rajak    ] [ thrym        ] 
+17:09 [@t_b           ] [ corbyhaas   ] [ ggg`         ] [ mattl     ] [ rEv9     ] [ timclassic   ] 
+17:09 [ __gilles[away]] [ davl        ] [ ghostyy      ] [ metadave  ] [ rgouveia ] [ TronDD       ] 
+17:09 [ acidfoo-_     ] [ deei        ] [ ghugha       ] [ mikeputnam] [ rnelson  ] [ TuxOtaku     ] 
+17:09 [ administraitor] [ Dhole       ] [ harrellc00per] [ mpts      ] [ ryan     ] [ Vaelatern    ] 
+17:09 [ akkartik      ] [ dmfr        ] [ Harry        ] [ MurphSlaw ] [ S007     ] [ vbarros      ] 
+17:09 [ antoon_i      ] [ dostoyesvky ] [ IcePic       ] [ Naabed-   ] [ scadu    ] [ venam        ] 
+17:09 [ antranigv     ] [ Dowzee      ] [ jaypatelani  ] [ nacci     ] [ selckin  ] [ vyvup        ] 
+17:09 [ ar            ] [ DrPete      ] [ jbernard     ] [ nacelle   ] [ SETW     ] [ whyt         ] 
+17:09 [ asie          ] [ dsp         ] [ jonbryan     ] [ nailyk    ] [ sgnorptz ] [ Wilawar      ] 
+17:09 [ azend|vps     ] [ DuClare     ] [ jsing        ] [ Niamkik   ] [ skizye   ] [ wilornel     ] 
+17:09 [ babasik122    ] [ duncaen     ] [ kAworu       ] [ noexcept_ ] [ skrzyp   ] [ wodim        ] 
+17:09 [ bcd           ] [ dxtr        ] [ kittens      ] [ oldlaptop ] [ smiles`  ] [ WubTheCaptain] 
+17:09 [ bch           ] [ eau         ] [ kl3          ] [ owa       ] [ Soft     ] [ xor29ah      ] 
+17:09 [ benpicco      ] [ ebag        ] [ kpcyrd       ] [ petrus_lt ] [ stateless] [ zelest       ] 
+17:09 [ biniar        ] [ electricto4d] [ kraucrow     ] [ phy1729   ] [ stsp     ] [ zyklon       ] 
+17:09 [ brianpc       ] [ emigrant    ] [ kysse        ] [ poptart   ] [ sunil    ] 
+17:09 [ brianritchie  ] [ entelechy   ] [ landers2     ] [ qbit      ] [ swankier ] 
+17:09 -!- Irssi: #openbsd-daily: Total of 130 nicks [6 ops, 0 halfops, 0 voices, 124 normal]
+17:13 < rgouveia> yw :)
+17:22 <@mikeb> duncaen: why :( ?
+17:23 < duncaen> i guess not ":(" anymore, doesnt look complicated
+17:23 < duncaen> but its old and not touched since years
+17:23 < Naabed-> then why do it if you know you're not gonna enjoy it?
+17:23 < Naabed-> (isn't the purpose of this code reading to have fun after all)
+17:24 < duncaen> I want to learn about kernel/driver development, thats my main goal for the code reads
+17:24 < duncaen> i could read some more interesting drivers but i think its a good idea to start with something simple
+17:24 < duncaen> and i have a goal for the read which helps to get motivated
+17:25 < Naabed-> okay
+17:25 < Naabed-> I'm not really into this subsystem so dunno if it's an easy entry point or not
+17:28 < duncaen> my goal is to get vga_pci_mmap working, netbsd already has this, vt100 emulation works, I think there is just very little code missing to get it working and I can cheat by looking at netbsd
+17:34 <@mikeb> duncaen: read some hvn :-)
+17:34 <@mikeb> ah, ok then,
+17:34 < duncaen> dont want to give microsoft my cc :s
+17:35 <@mikeb> why do you need this vga_pci_mmap again?
+17:35 < duncaen> i use a few tools on linux that use the framebuffer for some basic stuff
+17:36 < duncaen> a small terminal emulator, a image viewer a pdf reader
+17:36 <@mikeb> like a vesa framebuffer?
+17:36 < duncaen> on linux it just mmaps /dev/fb and there is a ioctl similiar to WSDISPLAYIO_GINFO to get width height bytes per pixel and colormap
+17:36 <@mikeb> but that implies some gfx mode, doesn't it?
+17:37 < duncaen> yes need to set the tty into WSDISPLAYIO_MODE_MAPPED or WSDISPLAYIO_MODE_DUMBFB
+17:38 <@mikeb> have you seen sys/dev/vesa/Attic/ ?
+17:40 <@mikeb> there was code for WSDISPLAYIO_MODE_DUMBFB in vga_pci_mmap
+17:40 <@mikeb> look in the history
+17:41 < duncaen> yea there was something about mmaping the aread removed from vga_common.c too
+17:41 <@mikeb> duncaen: http://theapt.org/~mike/vesa.diff
+17:42 <@mikeb> and this is why it was removed: KVM86_CALL_
+17:44 <@mikeb> this code used to switch into the virtual 8086 mode
+17:45 < duncaen> hm netbsd has a genfb(4) which replaced vesa
+17:45 < duncaen> https://blog.netbsd.org/tnf/entry/heads_up_x86_framebuffer_console
+17:48 <@mikeb> this looks like it's just a common frontend
+17:49 < duncaen> http://cvsweb.netbsd.org/bsdweb.cgi/~checkout~/src/sys/dev/wsfb/genfb.c
+17:49 < duncaen> this provides the ioctl that are missing grom vga_pci
+17:50 <@mikeb> no, this is just a shim
+17:50 <@mikeb> http://bxr.su/NetBSD/sys/dev/pci/genfb_pci.c -- here's the usage
+17:50 <@mikeb> it's a DRM frontend
+17:50 < duncaen> ah thanks
+17:58 <@mikeb> you can in theory add mmap and those modes into the interldrm if you have the hardware
+17:58 <@mikeb> in /sys/dev/pci/drm/i915/i915_drv.c there's an empty inteldrm_wsmmap
+17:58 <@mikeb> but i dunno if it's worth it :)
+17:59 < duncaen> hm yea on systems with drm i can just use drm :D
+18:18 < DuClare> mulander: Think you could run one more round of testing?  http://guu.fi/g/smtp2.patch.txt
+18:20 <@mulander> DuClare: of course
+18:22 <@mulander> DuClare: against which branch?
+18:22 <@mulander> 6.1 or -current or both?
+18:23 < DuClare> I don't think it matters but I'd go against -current.
+18:23 <@mulander> ok I have a current checkout from our yesterdays diff
+18:23 < DuClare> Yep
+18:23 < DuClare> It's the same thing, just the order of operations swapped
+18:23 < DuClare> resume first then call io_done
+18:24 < DuClare> It ought to work the same so far as I can tell.
+18:24 <@mulander> no harm checking
+18:24 < DuClare> Right
+18:24 <@mulander> I'll block smtp from the net and we can test
+18:24 < DuClare> If it's ok you can reply on tech@
+18:26 <@mulander> ok blocked, applying diff
+18:27 <@mulander> note, there is a storm coming here, if I get dropped/stop replying than it's power related
+18:31 <@mulander> ok binary booted up, proceeding to test - DuClare I assume the 10x 256k files are enough a test?
+18:32 <@mulander> I'll do the 2m ones
+18:32 <@mulander> just to be sure, that was our yesterdays test on -current
+18:34 <@mulander> DuClare: looks like all passed
+18:35 < DuClare> Good
+18:35 <@mulander> 11 msgs went through, nothing stale - will reply on list
+18:35 < DuClare> Great
+18:35 <@mulander> as soon as I unblock my smtpd :P
+18:41 < DuClare> :-)
+18:41 <@mulander> sent, and mentioned errata - would love this backported for 6.1
+19:30 < SETW>  /win 2
+19:40 < duncaen> hm i could use vesa from userspace, but having one generic simple framebuffer would be nice
+20:00 [Users #openbsd-daily]
+20:00 [@akfaew        ] [ brtln       ] [ erethon      ] [ lk23789k23] [ qbit[m]  ] [ tarug0       ] 
+20:00 [@dlg           ] [ bruflu      ] [ fcbsd        ] [ lteo[m]   ] [ quinq    ] [ tdjones      ] 
+20:00 [@fcambus       ] [ brynet      ] [ filwishe1    ] [ lucias    ] [ rabbitear] [ tdmackey     ] 
+20:00 [@mikeb         ] [ cengizIO    ] [ g0relike     ] [ luisbg    ] [ rain1    ] [ Technaton    ] 
+20:00 [@mulander      ] [ commandoline] [ geetam       ] [ mandarg   ] [ rajak    ] [ thrym        ] 
+20:00 [@t_b           ] [ corbyhaas   ] [ ggg_         ] [ mattl     ] [ rEv9     ] [ ticoit       ] 
+20:00 [ __gilles[away]] [ davl        ] [ ggg`         ] [ metadave  ] [ rgouveia ] [ timclassic   ] 
+20:00 [ acidfoo-_     ] [ deei        ] [ ghostyy      ] [ mikeputnam] [ rnelson  ] [ TronDD       ] 
+20:00 [ administraitor] [ Dhole       ] [ ghugha       ] [ mpts      ] [ ryan     ] [ TuxOtaku     ] 
+20:00 [ akkartik      ] [ dmfr        ] [ harrellc00per] [ Naabed-   ] [ S007     ] [ Vaelatern    ] 
+20:00 [ antoon_i      ] [ dostoyesvky ] [ Harry        ] [ nacci     ] [ scadu    ] [ vbarros      ] 
+20:00 [ antranigv     ] [ Dowzee      ] [ IcePic       ] [ nacelle   ] [ selckin  ] [ vyvup        ] 
+20:00 [ ar            ] [ DrPete      ] [ jbernard     ] [ nailyk    ] [ SETW     ] [ whyt         ] 
+20:00 [ asie          ] [ dsp         ] [ jonbryan     ] [ Niamkik   ] [ sgnorptz ] [ Wilawar      ] 
+20:00 [ azend|vps     ] [ DuClare     ] [ jsing        ] [ noexcept_ ] [ skizye   ] [ wilornel     ] 
+20:00 [ babasik122    ] [ duncaen     ] [ kAworu       ] [ oldlaptop ] [ skrzyp   ] [ wodim        ] 
+20:00 [ bcd           ] [ dxtr        ] [ kittens      ] [ owa       ] [ smiles`  ] [ WubTheCaptain] 
+20:00 [ bch           ] [ eau         ] [ kl3          ] [ petrus_lt ] [ Soft     ] [ xor29ah      ] 
+20:00 [ benpicco      ] [ ebag        ] [ kpcyrd       ] [ phy1729   ] [ stateless] [ zelest       ] 
+20:00 [ biniar        ] [ electricto4d] [ kraucrow     ] [ polishdub ] [ stsp     ] [ zyklon       ] 
+20:00 [ brianpc       ] [ emigrant    ] [ kysse        ] [ poptart   ] [ sunil    ] 
+20:00 [ brianritchie  ] [ entelechy   ] [ landers2     ] [ qbit      ] [ swankier ] 
+20:00 -!- Irssi: #openbsd-daily: Total of 130 nicks [6 ops, 0 halfops, 0 voices, 124 normal]
+20:00  * mulander passes the mic to duncaen 
+20:01 < duncaen> -- code read: generic vga pci device driver --
+20:02 < duncaen> I have choosen the VGA driver because I'm new to the kernel and i thought it is an easy entry point
+20:02 < duncaen> I have already looked into it a bit and learned a bit
+20:03 < duncaen> First I choosed the VGA driver because I thought I can simply add a method to mmap the memory in userspace to have direct access to the framebuffer
+20:04 < duncaen> But this is not possible, the vga driver just implements VGA and not VBE or VESA which would allow full access to the graphic though shared memory
+20:04 < duncaen> VGA can operate in different modes, but those are all text modes and they change just the resolution and the number of available colors
+20:06 < brynet> vga(4) just uses the text mode setup by the BIOS, there were a few people that were tackling VBE in the bootloader, but EFI made that easier with efifb(4).
+20:07 < duncaen> There was a vesa device which was removed 2015 and was already broken for 7 years before it was removed
+20:07 < duncaen> http://theapt.org/~mike/vesa.diff
+20:08 < duncaen> s/broken/not enabled in default kernels
+20:09 < duncaen> So openbsd has wscons(4) which is responsible to provide a console
+20:10 < duncaen> those consoles can be provided over different devices
+20:12 < duncaen> serial consoles, vga and other framebuffer devices
+20:12 -!- martin__ is now known as martin__2
+20:15 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c
+20:16 < duncaen> I'm new to this, I would say this is the main part of the vga driver
+20:17 < duncaen> and then there is https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pci.c which overwrites some of the functions from vga.c
+20:20 < duncaen> Lets start with the vga_pci_match function https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pci.c#L175
+20:21 < duncaen> this function is used to test if the given device is a vga-pci device
+20:22 < duncaen> the function returns 0 if the driver does not work for the given device
+20:23 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/pci/vga_pcivar.h#L34
+20:24 < duncaen> the first check checks the pci class and subclass
+20:25 < duncaen> /* check whether it is disabled by firmware */
+20:28 < duncaen> Ok this is a PCI feature
+20:29 < duncaen> http://wiki.osdev.org/PCI#PCI_Device_Structure
+20:31 < duncaen> the next check vga_is_console is defined in vga.c lets skip this for now
+20:35 < duncaen> lets skip this file, I cant find anything interesting
+20:35 < duncaen> Im looking now at https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c
+20:38 < DuClare> Hi weezelding
+20:41 < duncaen> Ok i have a hard time to find a nice entry point, lets look how fonts are loaded and set, starting at wsfontload(8)
+20:48 < duncaen> https://github.com/openbsd/src/blob/master/usr.sbin/wsfontload/wsfontload.c
+20:50 < weezelding> g'day DuClare
+20:51 < weezelding> or evening actually
+20:51 < duncaen> It uses the WSDISPLAYIO_LDFONT ioctl with a wsdisplay_font structure which holds some extra info like width and height and a .data field which is the content of the choosen font file
+20:52 < duncaen> the WSDISPLAYIO_LDFONT ioctl is handled in https://github.com/openbsd/src/blob/master/sys/dev/wscons/wsdisplay.c#L1304
+20:53 < duncaen> it checks if the screen supports loading fonts
+20:53 < duncaen> VGA supports it, a serial console wouldnt
+20:54 < duncaen> then it uses the font settings to calculate the length of the buffer
+21:00 < duncaen> Ok i was wondering why there are not more checks to verify the font size matches the given buffer, i tried to load sone font file with a different size
+21:00 < duncaen> but ioctl only return EINVAL
+21:00 < duncaen> I looked at the vga load_font function whcih is called from wdsisplay.c
+21:00 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga.c#L856
+21:03 < duncaen> ok this is boring too, the fonts are already in the right format for vga
+21:04 < brynet> :)
+21:04 < duncaen> https://github.com/openbsd/src/blob/master/sys/dev/ic/vga_subr.c#L82
+21:04 < duncaen> they are just written byte by byte to the pci bus
+21:05 < duncaen> -- code read: abort --
+21:05 < brynet> haha
+21:05 < duncaen> I need something better and a goal
+21:07 <@mulander> gdb duncaen duncaen.core
+21:08 < duncaen> someone added pledge to rebounds parent
+21:08 < duncaen> ENOTESTING
+21:08 <@mulander> want to go over that diff and see if it makes sense?
+21:09 < duncaen> it does not work
+21:09 < duncaen> there is no pledge that would allow write access to sysctl(3)
+21:09 < duncaen> and it needs to reset the sysctl at the end
+21:09 < duncaen> so you cant just pledge before calling sysctl(3)
+21:10 <@mulander> duncaen: looking for a new target to continue reading or aborting as in done for today?
+21:12 < duncaen> you can start if you want, i need something that motivates me, not sure how long I need to find something
+21:12 < duncaen> the vga motivation was gone before starting the read and reading about VGA and VESA etc
+21:14 <@mulander> ok I grabbed the log and will boot up my commit box
+21:14 <@mulander> duncaen: still, thanks for taking the 18:00 slot, that helped me a lot
+21:15 <@mulander> and it was a nice read regardless if aborted!
+21:15 <@mulander> so, the mic stand is empty, I will pick it up in ~10 minutes for the pfctl diff
+21:16 <@mulander> unless someone else would like to step forward and do a read
+21:20 <@mulander> log from today: http://junk.tintagel.pl/openbsd-daily-vga.txt
+21:24 <@mulander> starting at 19:30 UTC
+21:27 <@mulander> rain1: around?
+21:28 < rain1> hey
+21:28 <@mulander> rain1: how do you want to be credited in the commit message?
+21:28 <@mulander> as your diff will go in on this code read
+21:28 <@mulander> (beginning of it)
+21:28 < rain1> oh you can just put rain1
+21:29 <@mulander> ok :)
+21:30 [Users #openbsd-daily]
+21:30 [@akfaew        ] [ brianpc     ] [ emigrant     ] [ kysse     ] [ poptart  ] [ swankier     ] 
+21:30 [@dlg           ] [ brianritchie] [ entelechy    ] [ landers2  ] [ qbit     ] [ tarug0       ] 
+21:30 [@fcambus       ] [ bruflu      ] [ erethon      ] [ lk23789k23] [ quinq    ] [ tdmackey     ] 
+21:30 [@mikeb         ] [ brynet      ] [ fcbsd        ] [ lucias    ] [ rabbitear] [ Technaton    ] 
+21:30 [@mulander      ] [ cengizIO    ] [ filwishe1    ] [ luisbg    ] [ rain1    ] [ thrym        ] 
+21:30 [@t_b           ] [ commandoline] [ g0relike     ] [ mandarg   ] [ rajak    ] [ ticoit       ] 
+21:30 [ __gilles[away]] [ corbyhaas   ] [ ggg_         ] [ mattl     ] [ rEv9     ] [ TronDD       ] 
+21:30 [ acidfoo-_     ] [ davl        ] [ ggg`         ] [ metadave  ] [ rgouveia ] [ TuxOtaku     ] 
+21:30 [ administraitor] [ deei        ] [ ghostyy      ] [ mikeputnam] [ rnelson  ] [ Vaelatern    ] 
+21:30 [ akkartik      ] [ Dhole       ] [ ghugha       ] [ mpts      ] [ ryan     ] [ vbarros      ] 
+21:30 [ antoon_i      ] [ dmfr        ] [ harrellc00per] [ Naabed-   ] [ S007     ] [ viq          ] 
+21:30 [ antranigv     ] [ dostoyesvky ] [ Harry        ] [ nacci     ] [ scadu    ] [ vyvup        ] 
+21:30 [ apotheon      ] [ Dowzee      ] [ IcePic       ] [ nacelle   ] [ selckin  ] [ weezelding   ] 
+21:30 [ ar            ] [ DrPete      ] [ jbernard     ] [ nailyk    ] [ sgnorptz ] [ whyt         ] 
+21:30 [ asie          ] [ dsp         ] [ jonbryan     ] [ Niamkik   ] [ skizye   ] [ wilornel     ] 
+21:30 [ azend|vps     ] [ DuClare     ] [ jsing        ] [ noexcept_ ] [ skrzyp   ] [ wodim        ] 
+21:30 [ babasik122    ] [ duncaen     ] [ kAworu       ] [ oldlaptop ] [ smiles`  ] [ WubTheCaptain] 
+21:30 [ bcd           ] [ dxtr        ] [ kittens      ] [ owa       ] [ Soft     ] [ xor29ah      ] 
+21:30 [ bch           ] [ eau         ] [ kl3          ] [ petrus_lt ] [ stateless] [ zelest       ] 
+21:30 [ benpicco      ] [ ebag        ] [ kpcyrd       ] [ phy1729   ] [ stsp     ] [ zyklon       ] 
+21:30 [ biniar        ] [ electricto4d] [ kraucrow     ] [ polishdub ] [ sunil    ] 
+21:30 -!- Irssi: #openbsd-daily: Total of 125 nicks [6 ops, 0 halfops, 0 voices, 119 normal]
+21:30 <@mulander> --- code read: finishing up our pfctl diffs ---
+21:31 <@mulander> *** goal: rain1 here submitted a nice pfctl diff https://marc.info/?t=149719001300001&r=1&w=2 that got tested and OK'ed
+21:31 <@mulander> *** which was not yet contributed as more code possible to refactor was identified
+21:32 <@mulander> *** we will commit rain1 diff and finish up the rainy day patch we made based on the feedback we got on list and from mikeb here
+21:32 <@mulander> ***
+21:33 <@mulander> first of all, let's get changes from rain1 committed so the remaining bit will be our additions
+21:34 <@mulander> the diff https://marc.info/?l=openbsd-tech&m=149718996106760&w=2
+21:34 <@mulander> since it's been almost a week, I'm going to re-apply this change on a fresh checkout of /usr/src/sbin/pfctl
+21:35 <@mulander> just in case enough code changed to make this conflict
+21:36 <@mulander> no changes since my last checkout (ran cvs -q up -Pad in that directory)
+21:36 <@mulander> applying the patch: patch -p0 < rain1.diff
+21:36 <@mulander> all clean.
+21:36 <@mulander> compiling
+21:37 <@mulander> all clean.
+21:37 <@mulander> now, we were pointed at a regress test suite for pfctl
+21:37 <@mulander> this is what stopped the rainy day diff, but before doing any commits let's make sure this diff passes.
+21:38 <@mulander> first installing the modified pfctl system wide with doas make install
+21:38 <@mulander> the regress suite for pfctl is in /usr/src/regress/sbin/pfctl
+21:39 <@mulander> I cd there and again do a clean cvs checkout in case something wa updated with cvs -q up -Pad
+21:39 < DuClare> What does -a do with cvs up?
+21:39 <@mulander> *-PAd
+21:39 <@mulander> typo, but -A resets any sticky flags
+21:39 < DuClare> Aight
+21:40 <@mulander> it's an easy mistake to go to a directory that was previously updated to a branch with -rOPENBSD_6_1 or -r1.35 rev num
+21:40 < DuClare> Yup.  If you follow stable..  :-)
+21:40 <@mulander> DuClare: or test errata on previous checkouts
+21:40 < DuClare> Right.
+21:41 <@mulander> I ran this test suite before, but usually one should start by reading the Makefile in that folder
+21:44 <@mulander> running just make in that folder.
+21:44 <@mulander> with elevated privileges
+21:44 <@mulander> the result is all test passing and the suite exiting with a 0 code
+21:44 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:44 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+21:44 <@mulander> rules cleared
+21:44 <@mulander> pfctl: Anchor or Ruleset does not exist.
+21:44 <@mulander> /usr/bin/doas ifconfig lo1000000 destroy
+21:44 <@mulander> /usr/bin/doas ifconfig tun1000000 destroy
+21:44 <@mulander> /usr/bin/doas ifconfig tun1000001 destroy
+21:44 <@mulander> # echo $?
+21:44 <@mulander> 0
+21:44 <@mulander> ---
+21:44 <@mulander> ^ pasting just the few last lines
+21:45 <@mulander> we know this diff has been around for a while, tb@ tested it initially, then mikeb@ had a look - both OK'ed the change
+21:45 <@mulander> so we can safely commit this to the tree
+21:48 <@mulander> I'm preparing the commit message and doing a final review of the diff line by line
+21:56 <@mulander> final check before commit - cvs -qn up
+21:56 <@mulander> shows what files are modified without touching anything (dry run)
+21:56 <@mulander> just pfctl.c - nice way to catch if you modified something locally by accident
+21:57 <@mulander> ok, committing
+22:00 -!- mulander changed the topic of #openbsd-daily to: Read one OpenBSD source file per day | commits: 6 | Channel rules: https://ptpb.pw/cnx1 | Next: duncaen: generic vga pci device - 18:00 UTC / mulander: pfctl patch continued - after duncaen
+22:00 <@mulander> will post the marc.info link as soon as it catches up
+22:00 <@mulander> now, for our remaining changes
+22:01 <@mulander> first let's apply what we had and see why we didn't commit it yet
+22:03 <@mulander> https://junk.tintagel.pl/openbsd-daily-pfctl-1.diff this is our diff from the previous pfctl session
+22:03 <@mulander> short summary of what it did can be seen here:
+22:03 <@mulander> https://marc.info/?l=openbsd-tech&m=149730079132344&w=2
+22:03 <@mulander> (marc.info for todays commit: https://marc.info/?l=openbsd-cvs&m=149764315926514&w=2)
+22:05 <@mulander> first, let's rebase the diff on the changes we just committed
+22:08 <@mulander> https://junk.tintagel.pl/openbsd-daily-pfctl-2.diff
+22:08 <@mulander> now, time to recompile and to run the regress test, to see why we did not commit yet
+22:09 <@mulander> so make, doas make install
+22:10 <@mulander> and running make in the regress test
+22:10 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:10 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+22:10 <@mulander> rules cleared
+22:10 <@mulander> pfctl: Anchor or Ruleset does not exist.
+22:10 <@mulander> pfctl: pfctl_clear_tables: Anchor or Ruleset does not exist
+22:10 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+22:10 <@mulander> FAILED
+22:10 <@mulander> *** Error 1 in target 'regress' (ignored)
+22:10 <@mulander> 1. we see the double error reporting which mikeb@ pointed out
+22:10 <@mulander> 2. the regress explicitly exited with an error
+22:12 <@mulander> let's look at this tests data
+22:12 <@mulander> # cat pfcmd1.in                                                                                                                                                                                 
+22:12 <@mulander> pass
+22:13 <@mulander> # cat pfcmd1.ok                                                                                                                                                                                 
+22:13 <@mulander> # 
+22:13 <@mulander> # cat pfcmd1.opts                                                                                                                                                                               
+22:13 <@mulander> -a regress/does_not_exist -Fa
+22:13 <@mulander> #
+22:15 <@mulander> now the Makefile states
+22:15 <@mulander> # pfcmd: test pfctl command line parsing
+22:16 <@mulander> not sure yet if the tests fail due to the differing exit code or the output
+22:17 <@mulander> output is not present in the pfcmd1.* files, so it must be the exit code
+22:17 <@mulander> and there appreas to be only a single pfcmd test.
+22:17 <@mulander> for that specific option only.
+22:20 <@mulander> first let's take care of our double reporting
+22:21 <@mulander> we added that in pfctl_table.c
+22:21 <@mulander>  13 void                                                                                                                                                                                         
+22:21 <@mulander>  12 pfctl_clear_tables(const char *anchor, int opts)                                                                                                                                             
+22:21 <@mulander>  11 {                                                                                                                                                                                            
+22:21 <@mulander>  10         if (pfctl_table(0, NULL, NULL, "-F", NULL, anchor, opts) == -1)                                                                                                                      
+22:21 <@mulander>   9                 errx(1, "pfctl_clear_tables: %s", pfr_strerror(errno));
+22:21 <@mulander> and similarly in the other functions
+22:22 <@mulander> the unmodified pfctl does report those errors but does not terminate with a non 0 exit code
+22:23 <@mulander> we know the pfr_strerror was called in radix_perror (from our last reading)
+22:24 <@mulander> and that code was called from the RVTEST macro in pfctl_table.c
+22:24 <@mulander> which in turn is used in every branch of pfctl_table function
+22:24 <@mulander> that is used as the basis of all other operations like pfctl_clear_tables
+22:27 <@mulander> radix_perror does a fprintf to stderr but does not terminate
+22:27 <@mulander> as we discussed with mikeb@ we want commands resulting in an error to terminate with a non zero code
+22:27 <@mulander> but without double reporting
+22:28 <@mulander> since we already report, all we need to do is drop printing the error and just terminating with a non zero exit code
+22:28 <@mulander> so we turn our
+22:29 <@mulander> errx(1, "pfctl_show_tables: %s", pfr_strerror(errno));
+22:29 <@mulander> into exit(1)
+22:30 <@mulander> noting one thing, that I am not yet sure
+22:30 <@mulander> pfctl_show_ifaces - does it print the double error?
+22:30 <@mulander> and this one is interesting
+22:31 <@mulander> if we look in my email that contained tests from the modified kernel
+22:31 <@mulander> https://marc.info/?l=openbsd-tech&m=149730079132344&w=2
+22:31 <@mulander> we can compare stock to modified
+22:31 <@mulander> we can see all branches resulting in double error except -sI
+22:31 <@mulander> we can see the modified binary exiting early with a single error we reported
+22:32 <@mulander> whereas the stock binary reported the error also
+22:32 <@mulander> so we must have stopped an error reporting code path from executing
+22:33 <@mulander> let's follow the code
+22:33 <@mulander> http://bxr.su/OpenBSD/sbin/pfctl/pfctl_table.c#598
+22:33 <@mulander> ah, now our memory is refreshed
+22:34 <@mulander> http://bxr.su/OpenBSD/sbin/pfctl/pfctl_table.c#610
+22:34 <@mulander> we replaced an existing radix_perror call with our bail out
+22:34 <@mulander> so in this case we can remain unmodified
+22:35 <@mulander> but let's keep reporting consistent
+22:35 <@mulander> and instead of doing our errx we will call radix_perror and exit with 1
+22:36 <@mulander> I'm recompiling the change, installing it on my system and re-running the regress
+22:37 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:37 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in
+22:37 <@mulander> rules cleared
+22:37 <@mulander> pfctl: Anchor or Ruleset does not exist.
+22:37 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+22:37 <@mulander> FAILED
+22:37 <@mulander> *** Error 1 in target 'regress' (ignored)
+22:37 <@mulander> # echo $?
+22:37 <@mulander> 0
+22:38 <@mulander> ok, now it would be nice to know how the regress works
+22:40 < DuClare> Pretty sure it's the exit code
+22:41 < DuClare> As usual with make
+22:41 < DuClare> If a command fails, that's an error
+22:41 <@mulander> yeah but I assume we have to alter the regress
+22:41 <@mulander> as that's the desired behavior
+22:41 < DuClare> Yup
+22:41 <@mulander> so I'm looking for the convention
+22:41 -!- Irssi: Pasting 10 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:41 <@mulander> # TARGETS
+22:41 <@mulander> # pf: feed pfNN.in through pfctl and check whether the output matches pfNN.ok
+22:41 <@mulander> # selfpf: feed pfctl output through pfctl again and verify it stays the same
+22:41 <@mulander> # pfail: invalid rulesets pfctl must reject; pfailNN.in and pfailNN.ok
+22:41 <@mulander> # pfsetup: set up lo1 and perform more tests
+22:41 <@mulander> # pfr: table tests
+22:41 <@mulander> # pfsimple: just check whether pfctl accepts a given ruleset, not checking output
+22:41 <@mulander> # pfload: load ruleset into anchor regress and verify pfctl -vvsr
+22:41 <@mulander> # pfoptimize: as pfload, with -o flag to pfctl
+22:41 <@mulander> # pfopt: as target pf, but supply extra command line options
+22:41 <@mulander> # pfcmd: test pfctl command line parsing
+22:42 < DuClare> I don't know if there is one for things that are supposed to fail with an exit code
+22:42 <@mulander> pfcmd has literally this single test
+22:42 <@mulander> the definition of this test group suggests that it's supposed to ok parsing the command set
+22:42 <@mulander> not exactly speaking that it needs to result in a 0 exit code
+22:42 < DuClare> Right
+22:43 <@mulander> I see fail targets
+22:44 <@mulander> they diff the stderr + stdin with the expected output
+22:44 <@mulander> pfail${n}:
+22:44 <@mulander>         pfctl -o none -nv -f - < ${.CURDIR}/pfail${n}.in 2>&1 | \
+22:44 <@mulander>             diff -u ${.CURDIR}/pfail${n}.ok /dev/stdin
+22:44 <@mulander> this ignores the commands exit code
+22:45 <@mulander> so I'm wondering if this rule shoul dbe migrated to a pfailN
+22:46 < DuClare> It's not so much about rulesets though
+22:46 < DuClare> # pfail: invalid rulesets pfctl must reject; pfailNN.in and pfailNN.ok
+22:46 <@mulander> right
+22:46 < DuClare> In fact that group doesn't even work
+22:47 < DuClare> Since it's using specific command line flags
+22:47 <@mulander> so it would need a new group pfcmd and pfcmdfail?
+22:47 < DuClare> And testing command line parsing we obviously don't want those
+22:47 < DuClare> Yeah but as long as nobody's adding more commands to the group, I don't think it's useful to pretend it's a group
+22:47 <@mulander> yep
+22:48 < DuClare> Alternatively..
+22:48 <@mulander> alternatively we could create an -a anchor
+22:48 <@mulander> and then test the command
+22:48 <@mulander> which should not fail
+22:48 < DuClare> We could ignore errors on command line parsing, but redirect stderr to stdout and expect the output to contain error messages
+22:48 < DuClare> Yes that is an option too
+22:48 < DuClare> It is right to question the validity of the test :)
+22:48 <@mulander> let's see when it was added.
+22:49 <@mulander> https://github.com/openbsd/src/commit/3158f0adb7509352a3c3556d21756e8447f0edb9
+22:49 <@mulander> 7 years ago
+22:50 <@mulander> so perhaps not likely as something that really occurred in the wild
+22:50 <@mulander> I am leaning towards the best route being asking on the list
+22:50 <@mulander> what the pfcmd group is for and how we should handle it when the tool assumes to return an error on execution even if the parsing is valid.
+22:51 <@mulander> DuClare: agreed?
+22:52 < DuClare> Well I mean I don't suppose there's some big deep meaning to the group
+22:52 < DuClare> So I'd just fix the test to do something useful, or change the group to reflect the test better, and propose that
+22:53 <@mulander> ok, changing it to redirect stdout/stderr and testing feedback containing the errors sounds reasonable then
+22:53 < DuClare> Basically I try to take action and not waste others time asking for what to do if it's not obvious there's some bigger plan
+22:53 < DuClare> If someone wants to add more tests into that category, the problem can be revisited
+22:54 < DuClare> It's not a big deal
+22:56 < DuClare> So stderr tells that the anchor doesn't exist.  But it doesn't throw up usage or complain about the syntax parsing an argument.  That means option parsing was ok.
+22:58 < DuClare> You could change it to add the anchor and see if that works out neater
+22:59 < DuClare> In the general case, throwing away the error code and relying on stderr alone has one problem: its meaning could change if some path is changed to exit early rather than just printing the error and moving on
+23:00 <@mulander> first run after initial change but not changing input/outputs
+23:00 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+23:00 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in 2>&1 |  diff -u /usr/src/regress/sbin/pfctl/pfcmd1.ok /dev/stdin
+23:00 <@mulander> --- /usr/src/regress/sbin/pfctl/pfcmd1.ok       Sat Jul  3 04:32:45 2010
+23:00 <@mulander> +++ /dev/stdin  Fri Jun 16 23:00:13 2017
+23:00 <@mulander> @@ -0,0 +1,2 @@
+23:00 <@mulander> +rules cleared
+23:00 <@mulander> +pfctl: Anchor or Ruleset does not exist.
+23:00 <@mulander> *** Error 1 in . (Makefile:238 'pfcmd1')
+23:00 <@mulander> FAILED
+23:00 <@mulander> *** Error 1 in target 'regress' (ignored)
+23:00 <@mulander> will now add the expected output to the ok
+23:02 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+23:02 <@mulander> /usr/bin/doas pfctl `cat /usr/src/regress/sbin/pfctl/pfcmd1.opts`  -f /usr/src/regress/sbin/pfctl/pfcmd1.in 2>&1 |  diff -u /usr/src/regress/sbin/pfctl/pfcmd1.ok /dev/stdin
+23:02 <@mulander> /usr/bin/doas ifconfig lo1000000 destroy
+23:02 <@mulander> /usr/bin/doas ifconfig tun1000000 destroy
+23:02 <@mulander> /usr/bin/doas ifconfig tun1000001 destroy
+23:02 <@mulander> # echo $?
+23:02 <@mulander> 0
+23:02 <@mulander> clean pass.
+23:04 <@mulander> https://junk.tintagel.pl/pfctl-regress.diff
+23:04 <@mulander> our regress diff
+23:04 <@mulander> DuClare: please take a look
+23:06 <@mulander> our final diff for pfctl: https://junk.tintagel.pl/openbsd-daily-pfctl-3.diff
+23:07 <@mulander> OK, think it's time to wrap up - I will gather this up into a small email to tech proposing our change
+23:07 <@mulander> thanks for participating!
+23:07 <@mulander> --- DONE ---
+23:08 < DuClare> I'd try add the anchor maybe
+23:08 < DuClare> So we can get a clean exit
+23:08 < DuClare> That's probably better in the long run
+23:08 <@mulander> true, if the target is just parsing
+23:09 <@mulander> but would complicate the test group
+23:09 <@mulander> as would need loading rulesets
+23:09 < DuClare> Isn't it already loading a ruleset?
+23:09 < DuClare> pfcmd1.in
+23:09 <@mulander> and the initial test still had that exact stderr output
+23:09 <@mulander> just untested
+23:10 <@mulander> well we can try
+23:12 <@mulander> have to walk the dog first, give me 10 minutes :)
+23:14 < DuClare> Well looks like it might not be that easy
+23:15 < DuClare> Hmm
+23:16 < DuClare> Actually yeah this could work..
+23:21 <@mulander> back
+23:22 < DuClare> So if we use -n, clearopt is null'd and we won't run the actual clearing.  But if the point is just to test command line parsing, I don't see that it matters
+23:24 < DuClare> And if it did, anyone is free to come up with an *actual* regression, then we can stop contemplating nonsense and write a regress test that does just that
+23:24 < DuClare> (Heck if it were up to me, I'd just nuke this particular test)
+23:24 <@mulander> adding an nachor feels ugly
+23:24 <@mulander> *anchor
+23:25 < DuClare> We don't actually need to do that if we use -n
+23:25 < DuClare> -Fa won't be run, so we never get the error
+23:26 <@mulander> -n is for not loading rules isn't it?
+23:26 < DuClare> Right, or "take no action" in general
+23:26 < DuClare> # echo pass | pfctl -nv -a lol -Fa -f -
+23:26 < DuClare> pass all flags S/SA
+23:26 < DuClare> # echo $?
+23:26 < DuClare> 0
+23:26 <@mulander> with that it doesn't print 'rules cleared'
+23:26 < DuClare> Does it matter
+23:27 <@mulander> nope
+23:27 < DuClare> I don't know what's the point of this test, but if it's really about command line parsing
+23:27 <@mulander> # pfctl -n -a regress/does_not_exist -Fa
+23:27 <@mulander> # echo $?
+23:27 <@mulander> 0
+23:27 < DuClare> Well, command line parsing should throw an error if there is a problem in the command line
+23:27 <@mulander> the comment makes it read like command line parsing.
+23:27 < DuClare> Right
+23:27 <@mulander> # pfcmd: test pfctl command line parsing
+23:28 < DuClare> Right.  If there's a bug in command line parser, it'll manifest some way.. a valid command throws an error or an invalid command passes
+23:28 < DuClare> "rules cleared" doesn't enter the picture really, unless you also care that we do what the command line says we're supposed to do :)  But that's a different test
+23:29 < DuClare> So I say, drop the redirect to stderr, just use -n, and we're good.  I'd also propose the alternative of dropping this particular test entirely
+23:29 <@mulander> I think it was there as a start to test command line parsing, but can't tell :)
+23:29 < DuClare> Yea
+23:30 <@mulander> ok, reverting the Makefile diff
+23:30 <@mulander> adding -n
+23:31 <@mulander> tests pass
+23:31 <@mulander> (with stock Makefile and -n added to .opts)
+23:31 < DuClare> Right
+23:33 <@mulander> and this has the benefit of also passing with unmodified pfctl
+23:34 < DuClare> Yeah, that's nice
+23:35 <@mulander> https://junk.tintagel.pl/pfctl-regress-2.diff for the regress diff
+23:35 <@mulander> ok, really wrapping this up into an email this time and calling the read done :)
+23:35 <@mulander> thanks again!
