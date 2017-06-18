@@ -1,0 +1,323 @@
+= OpenBSD Malloc Implementation
+:author: mulander
+:authorNick: mulander
+:email: mulander@openbsd.org
+:editor: Mathieu Kerjouan
+:editorNick: niamtokik
+:editorEmail: contact@steepath.eu
+:date: 2017-06-17
+:revision: 2017-06-18
+:copyright: CC-BY-4.0
+:copyrightUrl: https://creativecommons.org/licenses/by/4.0/
+:description: Read how malloc is implemented on OpenBSD
+:keywords: malloc,kernel,implementation
+:originUrl: https://junk.tintagel.pl/openbsd-daily-malloc-1.txt
+:source: #openbsd-daily
+:sourceUrl: `irc://irc.freenode.net/{source}`
+:lang: en
+:toc2:
+:icons:
+:data-uri:
+
+:MAN:    https://man.openbsd.org
+:CVS:    https://cvsweb.openbsd.org/cgi-bin/cvsweb
+:BXR:    http://bxr.su/OpenBSD
+:GITHUB: https://github.com
+:GIST:   https://gist.github.com
+
+== License
+
+{copyright}.
+ifdef::copyrightUrl[]
+Full license is available at this URL: {copyrightUrl}.
+endif::copyrightUrl[]
+
+== Acknowledgement
+
+ifdef::author[]
+This document was originaly created ({date}) by {author} a.k.a
+{authorNick} <{email}>.
+endif::[]
+
+ifdef::source[]
+Raw documentation source is available at {originUrl} and was recorded
+from {sourceUrl}.
+endif::source[]
+
+ifdef::editor[]
+This document was edited ({revision}) by {editor} a.k.a {editorNick}
+<{editorEmail}>.
+endif::editor[]
+
+== Summary
+
+{description}
+
+== How malloc is implemented in OpenBSD
+
+`malloc` is implemented in {BXR}/lib/libc/stdlib/malloc.c[`malloc.c`]
+and man page is available in {MAN}/malloc[`malloc(3)`].
+
+Interesting stuff can be read on http://www.drijf.net/malloc/[drijf
+OpenBSD malloc implementation] page. You can also find a
+https://www.openbsd.org/papers/eurobsdcon2009/otto-malloc.pdf[nice
+presentation] from 2009 EuroBSDCon Edition.
+
+Quickly going over the slides, will copy things that stood out to me.
+Kernel knows two ways of giving memory to an application:
+{MAN}/sbrk[`sbrk(2)`] and {MAN}/mmap[`mmap(2)`].
+
+The {MAN}/brk[`brk(2)`] and {MAN}/sbrk[`sbrk(2)`] functions are
+historical curiosities left over from earlier days before the advent
+of virtual memory management. The virtual memory system for OpenBSD is
+documented at {MAN}/uvm.9[`uvm(9)`]. Originally `malloc`
+implementations were predictable, memory was rarely
+cleared/randomized, frequently reused.
+
+The OpenBSD `malloc` makes sure to return pages at random locations
+(instead of grabbing a sequence of memory from the kernel, slicing it
+into chunks and giving out consecutive chunks on each call). It works
+on non-contiguous ranges of pages which means that overruning an
+allocated buffer will more likely result in a crash instead of hitting
+a second allocated page of memory.
+
+Design goals from the pdf: simple, unpredictable, fast, less metadata
+space overhead, robust (eg. double frees being detected).The doc now
+goes into some implementation details (they might or might not be
+outdated but worth to go over it).
+
+There's apparently a hash table used that tracks mmap'ed regions using
+their addresses as keys.  The existing data structure for chunk
+allocations probably refers to the page dir? Not sure at this
+point. There's also a cache for free regions. Slide 13 presents a nice
+graph for the metadata.
+
+Slide 14, we see a struct for `region_info` and a hashing function.
+The backing hash table is grown if it crosses the 75% capacity water
+mark.  The cache, freed regions are kept for potential reuse, large
+regions are unmapped directly.  If the number of cached pages grows
+they can get unmapped. The search for a cached region is randomized
+
+Optionally pages are marked `PROT_NONE` which means the pages can't
+be executed, read or written to.
+
+NOTE: That's great for catching use-after-free bugs. You can enable
+      this with malloc options. Would that also catch double free?
+      Yes. The optional option `F` turns off delayed freeing. So that
+      makes it easier to catch double frees I don't think the mprotect
+      plays a role in this case.
+
+The {MAN}/free[`free(3)`] function causes the space pointed to by
+pointer to be either placed on a list of free blocks to make it
+available for future allocation or, when appropriate, to be returned
+to the kernel using {MAN}/munmap[`munmap(2)`]. If pointer is NULL, no
+action occurs. If pointer was previously freed by
+{MAN}/free[`free(3)`] or a reallocation function, the behavior is
+undefined and the double free is a security concern.
+
+NOTE: C arguments are always passed by value and it can't modify the
+      pointer you pass to it. But a `free` would cause the pointer to
+      be erased from the hash table mentioned earlier.
+
+When the pointer isn't found in the hash table, free return an error
+and this behavior can be see in
+{BXR}/lib/libc/stdlib/malloc.c#1331[`malloc.c`] on line 1331.
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+if (r == NULL)
+    wrterror(pool, "bogus pointer (double free?) %p", p);
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+{BXR}/realloc[`realloc(3)`] attempts to avoid mmap'ing more memory
+from the kernel by checking if the required pages are already
+existing. The {BXR}/lib/libc/stdlib/malloc.c#dir_info[`dir_info`] hash
+is mmap'ed with `PROT_READ` (read only) and there's an option to do
+the same for the page directory.
+{BXR}/lib/libc/stdlib/malloc.c#dir_info[`dir_info`] and
+{BXR}/lib/libc/stdlib/malloc.c#chunk_info[`chunk_info`] are also
+protected by canaries and we learn this `malloc` first appeared in BSD
+4.4.  That's it for the pdf.
+
+Doing a quick scan though the site itself. We learn that malloc can
+grab instrumentation data if built with
+{BXR}lib/libc/stdlib/malloc.c#26[`MALLOC_STATS`] defined and not
+compiled in by default and with that option malloc additionally
+{BXR}/lib/libc/stdlib/malloc.c#106[tracks the source of the
+allocation].
+
+NOTE: This was introduced in a time before the valgrind port for
+      OpenBSD (I still don't know how well it works, never tried
+      it?). So that's one way to look out for and track memory leaks.
+
+I'm currently iterating over defines for `MALLOC_STATS` to see what
+code gets compiled in.  not going into details yet, just looking to
+get a feel for it.  The largest chunk indeed is for leak tracking, so
+that could be a nice feature oriented read (how the tracking works)
+and the document shows us actually how the feature is used.
+
+We have a leaky `x.c` program, that allocates 10240 bytes 3 times, then
+calls free just on the last allocation and finally allocates 1000 bytes
+again.
+
+There's a way to grab the instrumentation data via {MAN}/gdb[`gdb`],
+even if the program itself is not running with malloc opts that allow
+grabbing this data.  So I assume the option only causes a dump, and
+those stats are always grabbed if `malloc` is compiled with
+`MALLOC_STATS`. It also shows how to go from the stored `f` address to
+a line of code in `gdb`. `malloc` options are documented in
+{MAN}/malloc.conf.5[`malloc.conf(5)`].
+
+For now, let's go over the available `malloc` options and set a goal
+to learn what is the default and how the options are read/parsed,
+including the implementation details (as the symbolic link in examples
+seems interesting).
+
+So from `malloc.conf` we learn, upon the first call to the `malloc(3)`
+family of functions, an initialization sequence inspects the symbolic
+link `/etc/malloc.conf`, next checks the environment for a variable
+called `MALLOC_OPTIONS`, and finally looks at the global variable
+`malloc_options` in the program. Each is scanned for the following
+flags. Flags are single letters. Unless otherwise noted uppercase
+means on, lowercase means off.
+
+I assume 'first call' is per program I checked on my boxes and none
+have `malloc.conf` by default.  Obviously none also define
+`MALLOC_OPTIONS` as for the flag itself.  The man page goes over them
+pretty clearly, so no point of me copy pasting info here.  One
+interesting bit so far, is `D` ("Dump"), `malloc(3)` will dump
+statistics to the file `./malloc.out`, if it already exists, at exit.
+
+Worth to check how it the code behaves when the file is present or
+not, the doc makes me think it will never dump unless the file is
+pre-created.  `F` is the freeguard for delayed frees.
+
+NOTE: It won't dump unless the file is there and it will warn you
+      about that on stderr.
+
+Looks like `PROT_*` does detect double free and the code suggests that
+with using `U` with `F`. This option is intended for debugging rather
+than improved security (use the `U` option for security). On `U`
+("Free unmap"), enable use after free protection for larger
+allocations. Unused pages on the freelist are read and write protected
+to cause a segmentation fault upon access.
+
+TIP: Use after free isn't quite the same as double free, but I think
+     double frees of these pages may still be captured. I assume they
+     would be removed from the hash table.  And re-inserted if they
+     once they are put back to use.
+
+`X` is also interesting, mostly because it shows up with an example on
+how to compile in `malloc` options to binaries which makes me wonder
+what happens if a program does runtime modifications to that
+structure.
+
+NOTE: This structure is never touched past first `malloc`. It's
+      useless to modify it and would be a vulnerability vector if it
+      had impact.
+
+There are also two options for controlling the cache size. We also
+learn that the default page cache is 64.
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+#define MALLOC_DEFAULT_CACHE    64
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+[sh]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ln -s 'G<<' /etc/malloc.conf
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Creates a root owned symbolic link from the string? 'G<<' to a file
+named `/etc/malloc.conf`. I predict that it follows the symlink to
+find the linked to 'filename' and treat that as options.
+
+IMPORTANT: `G<<` need to be a valid name (anything goes except nul or
+           `/`). But it obviously need not point to any existing file
+           as in doesn't have to exist.
+
+Let's look at some code. Upon the first call to the `malloc(3)` family
+of functions, an initialization sequence inspects the symbolic link
+`/etc/malloc.conf`. This is mentioned as the first thing the code
+does, so let's search for
+{BXR}/lib/libc/stdlib/malloc.c#590[`/etc/malloc.conf`].
+
+We are in `omalloc_init`, we can see cache being set to 64 with and
+option junk set to 1. Junk option increase the junk level by one if it
+is smaller than 2. Junking writes some junk bytes into the area
+allocated.
+
+Currently junk is bytes of `0xdb` when allocating; freed chunks are
+filled with `0xdf`. By default the junk level is `1`: small chunks are
+always junked and the first part of pages is junked after free. After
+a delay (if not switched off by the `F` option), the 😶filling patter
+is validated and the process is aborted if the pattern was
+modified. If the junk level is `0` (zero), no junking is
+performed. For junk level `2`, junking is done without size
+restrictions.
+
+Now we have a chunk of code executed up to 3 times.  Interesting
+pattern I never saw before. The loop switches on the value picking a
+patch.  On the first try we call {MAN}/readlink.2[`readlink(2)`] on
+`/etc/malloc.conf`.
+
+This follows the symlink placing the name of our 'fake' options file
+in the buffer b.  Second path is only allowed if we are running
+elevated, the code then reads the `MALLOC_OPTIONS` environment variable.
+
+IMPORTANT: The environment variable is only respected if we are *not*
+           `setuid`/`setgid`. `issetugid` return 1 if the process was
+           suid. It's dangerous in general to respect environment
+           variables set by a less privileged user.  I don't know if
+           it's a big deal in this case.  But I guess the sysadmin
+           could want all the security improving options on any
+           process that starts at root and you don't want to let
+           random users override that option with an environment
+           variable.
+
+Final path, is grabbing the potentially compiled in `malloc_options` and
+finally parsing it.  There are 2 distinct paths for `S` and `s`:
+
+ * `S` -> Enable all options suitable for security auditing;
+ * `s` -> lower case version means turning it off.
+ 
+First branch when spotting `S` calls omalloc-parseopt with `CGJ`.  So
+canaries, guard pages and junking.
+
+Second one disables all 3.  The final code path handles everything on
+malloc options that is not `s` or `S`.  It's interesting that s also
+sets default cache.  There's one thing that I am noticing right
+now. There's a hierarchy:
+
+[txt]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+malloc.conf < MALLOC_OPTIONS < malloc_options
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+So if a program compiles `malloc_options` then there is no external way
+to change it's flags and some programs utilize that feature.
+
+NOTE: what would be the need of re-setting the malloc-cache in `s`?
+      For a bit of hardening, I guess. If you have `S`, it disables
+      the cache.  But someone wants to override that with `s` in the
+      environment, what do you do? Line614
+
+{BXR}/lib/libc/stdlib/malloc.c#omalloc_parseopt[`parseopt`] cache
+sizes first, handled with bitshifts of malloc_cache then pretty much
+boolean yes/no flags depending on the character, and finally a stderr
+warning for unkown options and randomly enabled canary.
+
+[c]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     while ((mopts.malloc_canary = arc4random()) == 0)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+NOTE: That's less of an option, you can't even set it. It's just
+      stored there, automatically.  It's not controlled by any
+      flag. `mopts` stores other internal use data too.
+
+The `dir_info` is protected by these canaries, `mopts` is read-only so
+an attacker can't mess with the stored canary. If they somehow managed
+to mess with `dir_info`, they'd have to know the canaries and write
+them in the right spots.

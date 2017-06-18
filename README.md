@@ -26,6 +26,7 @@ You can find original raw IRC logs here:
  * 2017-06-16: https://junk.tintagel.pl/openbsd-daily-vga.txt by @duncaen
  * 2017-06-16: https://junk.tintagel.pl/openbsd-daily-pfctl-diff-2.txt by @mulander
  * 2017-06-17: https://junk.tintagel.pl/openbsd-daily-malloc-1.txt by @mulander
+ * 2017-06-18: https://junk.tintagel.pl/openbsd-daily-malloc-2.txt by @mulander
 
 Copies of these logs are available on this repository in `origin` directory.
 
