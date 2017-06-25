@@ -32,6 +32,10 @@ You can find original raw IRC logs here:
                and @DuClare
  * 2017-06-20: https://junk.tintagel.pl/openbsd-daily-malloc-4.txt by @mulander
                and @DuClare
+ * 2017-06-21: https://junk.tintagel.pl/openbsd-daily-malloc-5.txt by @mulander
+ * 2017-06-22: https://junk.tintagel.pl/openbsd-daily-malloc-6.txt by @mulander
+ * 2017-06-23: https://junk.tintagel.pl/openbsd-daily-malloc-7.txt by @mulander
+ * 2017-06-24: https://junk.tintagel.pl/openbsd-daily-malloc-8.txt by @mulander
 
 Copies of these logs are available on this repository in `origin` directory.
 
