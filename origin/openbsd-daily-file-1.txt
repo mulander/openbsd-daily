@@ -1,0 +1,144 @@
+21:11 [Users #openbsd-daily]
+21:11 [@dlg           ] [ corbyhaas      ] [ filwisher    ] [ landers2 ] [ Re[Box]  ] [ tdmackey_    ] 
+21:11 [ __gilles      ] [ CyberStorm2    ] [ flopper      ] [ lteo[m]  ] [ rEv9     ] [ Technaton    ] 
+21:11 [ acgissues     ] [ davl           ] [ FRIGN        ] [ lucias   ] [ rgouveia_] [ thrym        ] 
+21:11 [ administ1aitor] [ desnudopenguino] [ g0relike     ] [ luisbg   ] [ rnelson  ] [ timclassic   ] 
+21:11 [ akfaew        ] [ Dhole          ] [ geetam       ] [ mandarg  ] [ rwrc     ] [ TronDD       ] 
+21:11 [ akkartik      ] [ dial_up        ] [ ghostyy      ] [ mattl    ] [ rwrc_    ] [ TronDD-w     ] 
+21:11 [ antoon_i      ] [ dmfr           ] [ ghugha       ] [ metadave ] [ ryan     ] [ TuxOtaku     ] 
+21:11 [ antranigv     ] [ dostoyevsky    ] [ harrellc10per] [ mikeb    ] [ S007     ] [ ule          ] 
+21:11 [ apotheon      ] [ dsp            ] [ Harry        ] [ mulander ] [ salva    ] [ vbarros      ] 
+21:11 [ ar            ] [ DuClare        ] [ horia        ] [ Naabed-_ ] [ SETW     ] [ vyvup        ] 
+21:11 [ azend|vps     ] [ duncaen        ] [ jbernard     ] [ nacci    ] [ shazaum  ] [ weezelding   ] 
+21:11 [ bcd           ] [ dxtr           ] [ John_Z       ] [ nacelle  ] [ skizye   ] [ whyt         ] 
+21:11 [ bch           ] [ eau            ] [ jsing        ] [ nailyk   ] [ skrzyp   ] [ wilornel     ] 
+21:11 [ biniar        ] [ ebag_          ] [ jwit         ] [ Niamkik  ] [ smiles`  ] [ WubTheCaptain] 
+21:11 [ brianpc       ] [ emigrant       ] [ kAworu       ] [ oldlaptop] [ Soft     ] [ xor29ah      ] 
+21:11 [ brianritchie  ] [ entelechy      ] [ kittens      ] [ owa      ] [ stateless] [ zelest       ] 
+21:11 [ brtln         ] [ erethon        ] [ kl3          ] [ petrus_lt] [ swankier ] 
+21:11 [ bruflu        ] [ eyl            ] [ kpcyrd       ] [ phy1729  ] [ t_b      ] 
+21:11 [ brynet        ] [ fcambus        ] [ kraucrow     ] [ rain1    ] [ tarug0   ] 
+21:11 [ cengizIO      ] [ fdiskyou       ] [ kysse        ] [ rajak    ] [ tdjones  ] 
+21:11 -!- Irssi: #openbsd-daily: Total of 116 nicks [1 ops, 0 halfops, 0 voices, 115 normal]
+21:11 < mulander> --- code read: /usr/bin/file first look ---
+21:12 < mulander> *** general overview of the re-written file utility and first dive into the code ***
+21:14 < mulander> - code http://bxr.su/OpenBSD/usr.bin/file/
+21:14 < mulander> - man https://man.openbsd.org/OpenBSD-current/man1/file.1
+21:15 < mulander> file has been completely written from scratch by Nicholas Mariott for OpenBSD 5.8 replacing the old version of the utility
+21:17 < mulander> th idea of the utility is identifying the type of a file (text, executable etc.) based on various checks listed in the manpage:
+21:17 < mulander> 1. filesystem tests; 2. magic(5) tests; 3. text file checks
+21:17 < mulander> let's also open the magic man page https://man.openbsd.org/magic.5
+21:19 < brynet> One key difference is that it introduced privdrop, as file is often ran against arbitrary files as root in build scripts, etc.
+21:20 < rain1> it might be nice to know about this https://lcamtuf.blogspot.co.uk/2014/10/psa-dont-run-strings-on-untrusted-files.html for the gnu file tool
+21:20 < mulander> and also http://undeadly.org/cgi?action=article&sid=20150121093259 if someone wants to play with running `afl` on openbsd utilities
+21:22 < brynet> There is no GNU file(1), the previous version was written by Ian Darwin and maintained by NetBSD's Christos Zoulas, also including libmagic.
+21:22 < brynet> https://www.darwinsys.com/file/
+21:22 < brynet> It has a lot of potentially dangerous built-in inspectors, for example elf.
+21:24 < mulander> yeah generally a utility with a ton of parsing code and people thinking it's safe running it to identify (potentially malicous) binaries
+21:24 < mulander> what could go wrong?
+21:24 < mulander> :D
+21:24 < brynet> OpenBSD file(1) is, as mulander said, is limited to filesystem, magic(5) and text file checks.
+21:24 < rain1> great design :)
+21:25 < mulander> ok, with the above said we can look at what we hav against us
+21:25 < mulander> the utility is split into:
+21:25 < mulander> - file.[ch] - I assume the main entry point
+21:25 < mulander> - magic*[ch] - I assume for handling the /etc/magic checks
+21:26 < mulander> - text.c - text checks?
+21:27 < mulander> - xmalloc - malloc helper, doing checks and bailing out after each failed memory op
+21:28 < mulander> we will see how accurate our guesses are when diving into the code itself
+21:28 < mulander> I'm first looking at the Makefile
+21:29 < mulander> so it looks like /etc/magic is composed out of magdir files
+21:29 < mulander> on line 28
+21:30 < mulander> we see it iterating over each file, outputing it to stdout, sorting and slapping into a single file
+21:30 < mulander> wonder why that value for xargs
+21:30 < mulander> as the default for -n is 5000
+21:32 < mulander> guess just less allocated memory per xargs execution
+21:33 < mulander> going to the main files
+21:33 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.h
+21:34 < mulander> we learn that large files are read with 0.2 meg chunks
+21:34 < mulander> and that the user to which we drop privileges is named '_file'
+21:35 < mulander> there are also 2 functions from text.c declared here
+21:35 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c
+21:35 < mulander> - /* $OpenBSD: file.c,v 1.59 2017/04/18 14:16:48 nicm Exp $ */
+21:36 < mulander> usual series of includes, the one for socket seems interesting
+21:36 < phy1729> stdlib.h is included twice it looks like
+21:36 < mulander> phy1729: yep, you're right
+21:37 < mulander> phy1729: feel free to diff that up for tech@
+21:37 < mulander> we have 3 structs defined, the name suggest what they might be used for but we don't know at this point
+21:38 < brynet> header guards protect against multiple inclusions, but still a mistake.
+21:38 < mulander> we saw imsg included, so there should be some inter process communication
+21:39 < mulander> a bunch of forward declared functions, dead usage, next 3 for messaging, , child for spawning a sub process?, bunch of try_ judging by names to try different methods of detection
+21:40 < mulander> some flag globals for getopt
+21:40 < mulander> nd a path plus file handle - both I assume for /etc/magic
+21:41 < mulander> and a struct for long options
+21:42 < mulander> code starts by initializing TZ environment variables - wonder if that means we will use time related functions later on
+21:42 < mulander> next standard getopt handling
+21:43 < phy1729> I wonder if tzset could or should be moved to the child.
+21:47 < mulander> if we are not running as root (or suid) we obtain the home directory
+21:47 < mulander> and check if the user has a ~/.magic file
+21:47 < mulander> this matches the documentation:
+21:47 < mulander> 'These are loaded from the /etc/magic file (or ~/.magic instead if it exists and file is not running as root). '
+21:48 < mulander> phy1729: good questions, let's have an eye to see if something relies on that being set before a child is spawned
+21:48 < mulander> if by then we don't have a magic file, we open the standard /etc/magic one
+21:52 < mulander> we create a socketpair for communication
+21:53 < mulander> we spawn our child
+21:53 < mulander> to which we will move next but let's read down main
+21:54 < mulander> cleanup the sockets, close the magic file,  there's a wait for the child with -c
+21:54 < mulander> documentation marks this is for debugging and looks like it skips imsg handling
+21:55 < mulander> we init the imsg and send each of our arguments (file paths) to the child using imsg's over the socket pair
+21:55 < mulander> when done, we wait for the child to quit and end execution
+21:56 < mulander> ok, jumping to child
+21:56 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#child
+21:56 < mulander> we start with a pledge
+21:56 < mulander> stdio getpw recvfd id
+21:56 < mulander> now, let's think about that tzset
+21:56 < brynet> Sorry for interrupting, for those following along, off-and-on I also play with nicm@'s file(1) and adapted the seccomp-bpf sandbox from OpenSSH to create a Linux port: https://github.com/brynet/file
+21:56 < rain1> I don't understand why it's forked off a child process to do tho work, instead of just doing it?
+21:57 < phy1729> rain1: so it can drop privs
+21:57 < rain1> whats stopping it from doing that in one process?
+21:57 < phy1729> That comes right after the pledge
+21:57 < brynet> For root privdrop, so that it does the parsing as an unpriv user, _file.
+21:57 < rain1> oh it reads a chunk of the file then drops privs to parse it, thanks i get it!
+21:58 < phy1729> I think the parent only opens a fd and sends that to the child.
+21:59 < brynet> preparse_message
+22:00 < brynet> prepare*
+22:02 < mulander> hm
+22:02 < mulander> where does file exec after forking?
+22:02 < phy1729> What would it exec?
+22:02 < brynet> It's not a re-exec program, but that's fine. It's not a daemon.
+22:03 < mulander> phy1729: a fork is a copy of the whole program, including it's code and address space
+22:03 < mulander> one usually re-execs to have the child drop the copy of what the parent had
+22:04 < brynet> nope, that's not the reason for re-exec.
+22:04 < rain1> it doesn't seem to do that here, could this be a problem? the parent has only really parsed args so far so it might be ok?
+22:05 < mulander> brynet: so what's the reason?
+22:06 < brynet> fork+exec model is useful for long running daemons, as the exec changes the ASLR
+22:06 < brynet> For example, fds are still inherited by the child after exec, that's why FD_CLOEXEC exists.
+22:06 < phy1729> brynet: rebound forks and execs unbound with an undocumented flag
+22:07 < brynet> Right, it's one of the fork+exec daemons, but file is not a daemon in the traditional, both the child and parent are quickly reaped.
+22:08 < mulander> so it would just add a large performane overhead without much gain?
+22:08 < mulander> *performance
+22:09 < mulander> what about the tzset? how do we find the code that relies on it being set
+22:09 < rain1> seems like it may not need the fork.. maybe we could glean some information about the fork based on the commit log
+22:10 < phy1729> rain1: You'd have to open all the fds before dropping privs though.
+22:11 < mulander> looks like magic-test does time manipulation
+22:11 < brynet> It's still a good division of responsibilities, the unpriv child handles all the parsing of files and is restricted using pledge.
+22:13 < brynet> The original version that nicm@ committed used systrace, which may have needed the parent/child delineation more.
+22:13 < mulander> https://github.com/openbsd/src/commit/9dd185ad7bb0c7a2398a5bb52303197cd79497e8
+22:13 < mulander> phy1729: looks like tzset was initially in the child
+22:14 < mulander> and it was there due to systrace
+22:14 < phy1729> Perhaps it could go before the pledge.
+22:15 < mulander> is there a benefit?
+22:16 < mulander> it still would have to run as the user who executed file
+22:16 < mulander> as tz might be different per user
+22:16 < mulander> tzset calls http://bxr.su/OpenBSD/lib/libc/time/localtime.c#tzload which goes over a bunch of places
+22:19 < mulander> so I don't think we would gain anything by moving it there
+22:19 < mulander> back to the code, we pledge, drop privileges and re-plege down to stdio and recvfd
+22:20 < mulander> recvfd so we can get the file descriptors from our parent over the imsg pipe
+22:24 < mulander> we then load the magic file, grab msgs from our parent, call test_file on it and send back a msg I assume confirming that we processed the file
+22:24 < mulander> so the parent can close the  fd
+22:24 < mulander> ah wrong
+22:24 < mulander> we close it ourselves
+22:25 < mulander> let's stop here for today, and start diving into each detection method tomorrow
+22:25 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#test_file
+22:25 < mulander> from here
+22:26 < mulander> --- DONE ---

@@ -1,0 +1,208 @@
+21:10 [Users #openbsd-daily]
+21:10 [@dlg           ] [ bruflu         ] [ erethon      ] [ kl3      ] [ oldlaptop_] [ stateless    ] 
+21:10 [ [EaX]         ] [ brynet         ] [ fcambus      ] [ kpcyrd   ] [ owa       ] [ t_b          ] 
+21:10 [ __gilles      ] [ cengizIO       ] [ fdiskyou     ] [ kraucrow ] [ phy1729   ] [ tarug0       ] 
+21:10 [ abecker       ] [ corbyhaas      ] [ filwisher    ] [ kysse    ] [ rain1     ] [ tdjones      ] 
+21:10 [ administ1aitor] [ davl           ] [ flopper      ] [ landers2 ] [ rajak     ] [ tdmackey_    ] 
+21:10 [ akfaew        ] [ desnudopenguino] [ FRIGN        ] [ lteo[m]  ] [ Re[Box]   ] [ Technaton    ] 
+21:10 [ akkartik      ] [ Dhole          ] [ g0relike     ] [ lucias   ] [ rEv9      ] [ thrym        ] 
+21:10 [ antoon_i_     ] [ dial_up        ] [ geetam       ] [ luisbg   ] [ rgouveia  ] [ timclassic   ] 
+21:10 [ antranigv     ] [ dmfr           ] [ ghostyy      ] [ mandarg  ] [ rnelson   ] [ TronDD       ] 
+21:10 [ apotheon      ] [ dostoyevsky    ] [ ghugha       ] [ martin__2] [ rwrc_     ] [ TuxOtaku     ] 
+21:10 [ ar            ] [ dsp            ] [ Guest56      ] [ mattl    ] [ ryan      ] [ ule          ] 
+21:10 [ azend|vps     ] [ DuClare        ] [ harrellc00per] [ metadave ] [ S007      ] [ vbarros      ] 
+21:10 [ bcallah       ] [ duncaen        ] [ Harry        ] [ mikeb    ] [ salva0    ] [ VoidWhisperer] 
+21:10 [ bcd           ] [ dxtr           ] [ jbernard     ] [ mulander ] [ SETW      ] [ vyvup        ] 
+21:10 [ bch           ] [ dzho           ] [ job          ] [ Naabed-_ ] [ shazaum   ] [ weezelding   ] 
+21:10 [ biniar        ] [ eau            ] [ jsing        ] [ nacci_   ] [ skizye    ] [ whyt         ] 
+21:10 [ brianpc       ] [ ebag           ] [ jwit         ] [ nacelle  ] [ skrzyp    ] [ wilornel     ] 
+21:10 [ brianritchie  ] [ emigrant       ] [ kAworu       ] [ nailyk   ] [ smiles`   ] [ WubTheCaptain] 
+21:10 [ brtln         ] [ entelechy      ] [ kittens      ] [ Niamkik  ] [ Soft      ] [ zelest       ] 
+21:10 -!- Irssi: #openbsd-daily: Total of 114 nicks [1 ops, 0 halfops, 0 voices, 113 normal]
+21:11 < mulander> --- code read: /usr/bin/file detection methods ---
+21:13 < mulander> *** goal: continue our read picking up from test_file and going through various detection methods ***
+21:13 < mulander> code: http://bxr.su/OpenBSD/usr.bin/file/
+21:13 < mulander> code: http://bxr.su/OpenBSD/usr.bin/file/file.c#656 (where we stopped)
+21:13 < mulander> man: https://man.openbsd.org/file
+21:13 < mulander> man: https://man.openbsd.org/magic.5
+21:14 < mulander> it's worth to point out, that after our previous read brynet dived into the code and prepared a diff for tech@
+21:14 < mulander> removing the child forking code (but keeping privdrop)
+21:14 < mulander> https://marc.info/?t=149853759300001&r=1&w=2
+21:15 < mulander> as far as I know this has not yet been committed so we will continue with what's listed on bxr.su
+21:15 < mulander> yet just wanted to point that out as it's a nic diff to go over (and test! and fuzz with afl!)
+21:16 < mulander> ok, so we know each file goes through test_file
+21:16 < mulander> there's a stop flag, set whenever any try method returns a non zero value
+21:17 < mulander> let's jump into the first method - try_stat
+21:17 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#try_stat
+21:19 < mulander> first thing I notice is no stat call here
+21:19 < mulander> if we jump back to prepare_message
+21:19 < mulander> we can see it's already done there
+21:20 < mulander> and the result is stored in .sb field of the msg
+21:20 < mulander> http://bxr.su/s?refs=prepare_message&project=OpenBSD
+21:21 < mulander> let's look at prepare message
+21:21 < mulander> if the file is standard input, we call fstat on the standard input file descriptor
+21:21 < mulander> and store it in .sb
+21:22 < mulander> if Lflag is passed, we call stat
+21:22 < mulander> L flag is documented as 
+21:22 < mulander>  
+21:22 < mulander> -L, --dereference
+21:22 < mulander> Causes symlinks to be followed.
+21:22 < mulander> otherwise we lstat
+21:23 < mulander> ok, back to our try_stat
+21:24 < mulander> if (sflag || strcmp(inf->path, "-") == 0) {
+21:24 < mulander> sflag is
+21:24 < mulander> Attempts to read block and character device files, not just regular files.
+21:24 < mulander> and the file is standard input
+21:25 < mulander> we inpsect the stored st_mode
+21:25 < mulander> s/and/or/ the file is standard input
+21:27 < mulander> if we have a named pipe (/* named pipe (fifo) */ S_IFIFO) and the file is not standard output we skip out of this switch
+21:27 < mulander> otherwise if we have:
+21:27 < mulander> S_ISBLK(st_mode m)  /* block special */ 
+21:28 < mulander> S_IFBLK  0060000  /* block special */ 
+21:28 < mulander> S_IFCHR  0020000  /* character special */ 
+21:28 < mulander> S_IFREG  0100000  /* regular */ 
+21:28 < mulander> file then we end the test returning 0 to our caller
+21:29 < mulander> essentially skipping this specific stat test and going to the next method
+21:30 < mulander> next if iflag was defined
+21:31 < mulander> Outputs MIME type strings rather than the more traditional human-readable ones. Thus it may say "text/plain" rather than "ASCII text".
+21:31 < mulander> and we can see it does so for 'not regular files' the 'application/x-not-regular-file' string is written to inf->result
+21:32 < mulander> and bails out with a return '1' which means other checks won't be tried
+21:33 < mulander> next we test the remaining possibilities
+21:33 < mulander> they are pretty self explanatory
+21:34 < mulander> https://man.openbsd.org/lstat.2 for what each S_IFDIR etc value stands for
+21:34 < mulander> and we can see what string is actually written to the result
+21:34 < mulander> if we got none of those options, we exit with 0 and continue to the next check
+21:35 < mulander> which is try_access
+21:35 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#try_access
+21:36 < mulander> this check bails out for empty files
+21:36 < mulander> I do wonder about the fd check
+21:36 < mulander> 576    if (inf->fd != -1)
+21:37 < mulander> 577        return (0);
+21:37 < mulander> why is it there?
+21:38 < mulander> it was there since the start
+21:39 < mulander> and we can see why
+21:39 < mulander> if we jump back to prepare_message
+21:39 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#263
+21:39 < mulander> 263    /*
+21:39 < mulander> 264     * pledge(2) doesn't let us pass directory file descriptors around -
+21:39 < mulander> 265     * but in fact we don't need them, so just don't open directories or
+21:39 < mulander> 266     * symlinks (which could be to directories).
+21:39 < mulander> 267     */
+21:40 < rain1> I have a question
+21:40 < mulander> so that check is there to avoid doing unnecessary work on directories
+21:40 < mulander> rain1: shoot
+21:40 < rain1> is imsg for communicating between parent and child?
+21:40 < mulander> yes
+21:41 < mulander> that's the protocol used over the pipe
+21:41 < rain1> the diff that removes fork still has the != -1 check
+21:41 < rain1> would it be possible (and good?) to completely remove the imsg stuff?
+21:41 < mulander> this -1 check is not for imsg
+21:41 < mulander> did brynet remove the skip from opening directories and symlinks?
+21:42 < brynet> nope
+21:42 < mulander> then the skip is still needed
+21:42 < mulander> possibly updating the comment in the diff brynet?
+21:43 < brynet> there's more cleanup that can be done later, still waiting to hear from nicm at least
+21:43 < mulander> rain1: roughly, the check is there because there is no fd to test when the file is a directory
+21:43 < mulander> and opening it (removing the skip) would not help detection
+21:44 < mulander> but would mena keeping a file descriptor open without need.
+21:44 < rain1> alright, i just got confused because I saw line 416: inf.fd = imsg.fd;
+21:45 < brynet> my diff wasn't committed
+21:45 < mulander> no problem
+21:46 < mulander> ok back to try_access
+21:46 < mulander> after the skip we still utilise stat data
+21:47 < mulander> to check the file modes
+21:47 < mulander> first, 'writable' if user, group or other have +w
+21:47 < mulander> same for executable
+21:48 < mulander> 'regular file' if regular according to stat
+21:48 < mulander> and I wonder about the no read permission
+21:48 < mulander> just hanging there?
+21:48 < mulander> that looks rather unconditional
+21:49 < rain1> I guess that is assuming fd == -1
+21:49 < brynet> It would be, this is fallback for when the file wasn't able to be opened.
+21:49 < brynet> Presumably because there were no read perms.
+21:50 < mulander> $ file new      
+21:50 < mulander> new: writable, regular file, no read permission
+21:50 < mulander> $ ls -l new
+21:50 < mulander> --w----r--  1 mulander  mulander  5 Jun 27 21:49 new
+21:50 < brynet> lstat/stat take a path argument, not an open file descriptor.
+21:50 < mulander> I still think it should check?
+21:51 < brynet> heh, yes perhaps.
+21:52 < mulander> so if u-r and others are +r
+21:52 < mulander> it will improperly report no read permissions
+21:53 < mulander> heh, that matches the behavior of the standard file utility
+21:53 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:53 < mulander> [mulander@napalm junk]$ chmod a-r *.txt
+21:53 < mulander> [mulander@napalm junk]$ chmod u+r user.txt 
+21:53 < mulander> [mulander@napalm junk]$ chmod g+r group.txt 
+21:53 < mulander> [mulander@napalm junk]$ chmod o+r others.txt 
+21:53 < mulander> [mulander@napalm junk]$ file *.txt
+21:53 < mulander> group.txt:  writable, regular file, no read permission
+21:53 < mulander> others.txt: writable, regular file, no read permission
+21:53 < mulander> user.txt:   ASCII text
+21:53 < mulander> that's from linux
+21:54 < mulander> so one would have to dig first and check as that might be just a breaking change for no good reason.
+21:54 < mulander> well that covers access
+21:55 < mulander> next load_file
+21:55 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#load_file
+21:55 < mulander> again bail on empty file
+21:56 < mulander> grab the size from stat
+21:56 < phy1729> Any reson the empty checks differ in try_{access,empty} ?
+21:56 < mulander> if it's larger than 256 * 1024 bytes we read in chunks
+21:56 < phy1729> Oops I'm skipping load_file
+21:57 < mulander> phy1729: I think because load file gives actual context
+21:57 < mulander> after trying to read the file size is set
+21:57 < mulander> before that we have no info on it
+21:58 < mulander> for non regular files we jump to reading
+21:58 < mulander> for regular files we map part of the file into memory
+21:59 < mulander> as READ only
+21:59 < mulander> and bail out of the check
+22:00 < mulander> otherwise fill_buffer is used http://bxr.su/OpenBSD/usr.bin/file/file.c#fill_buffer
+22:01 < mulander> allocating a buffer for reading and filling up to FILE_READ_SIZE bytes
+22:02 < mulander> this just prepares the data but does no checks itself
+22:02 < mulander> lets go to http://bxr.su/OpenBSD/usr.bin/file/file.c#try_empty
+22:02 < mulander> bails out for non empty files
+22:02 < mulander> for empty files prints either the mime type or just empty
+22:02 < mulander> depending if iflag was passed
+22:02 < mulander> I'm going to skip try_magic for now
+22:03 < mulander> we will leave that one as a read for tomorrow and will also dive into the code handling those checks
+22:03 < mulander> so try_text http://bxr.su/OpenBSD/usr.bin/file/file.c#try_text
+22:03 < mulander> this also seems to tie into the magic test
+22:03 < mulander> but let's check the first few calls
+22:03 < mulander> text_get_type
+22:04 < mulander> http://bxr.su/OpenBSD/usr.bin/file/text.c#123
+22:05 < mulander> so text_try_test takes the data, a size and a pointer to a function taking a character and returning int
+22:05 < mulander> for each byte up to size the function is called with the value at the offset passed
+22:05 < mulander> http://bxr.su/OpenBSD/usr.bin/file/text.c#text_is_ascii
+22:05 < mulander> the first 3 checks are pretty clear
+22:07 < mulander> const char  cc[] = "\007\010\011\012\014\015\033";
+22:07 < mulander> I assume are control characters
+22:07 < mulander> http://www.asciitable.com/
+22:08 < mulander> bell, backspace, tab, new line, form feed, carriage return, escape
+22:08 < mulander> so things that can show up in ascii txt
+22:08 < mulander> if our character is present in the cc table we consider the character 'is_ascii'
+22:09 < mulander> same if the character is between 31 and 127 range
+22:10 < mulander> we consider it latin1 if we have bytes over or equal the 160 range
+22:10 < mulander> and extended if there are bytes over or equal 128
+22:10 < mulander> text_gt_type then returns either ASCII, ISO-8859 or Non-ISO extended-ASCII
+22:11 < mulander> we bail if text_get_Type returns null
+22:11 < mulander> otherwise we go to a magic test
+22:11 < mulander> again we will skip this one today
+22:12 < mulander> if the magic test found something we store the result and stop the test chain
+22:12 < mulander> if not we move to text try words
+22:12 < mulander> http://bxr.su/OpenBSD/usr.bin/file/text.c#135
+22:14 < mulander> huh that one is interesting
+22:14 < mulander> http://bxr.su/OpenBSD/usr.bin/file/text.c#text_words
+22:14 < mulander> thre are a bunch of static ords built in
+22:15 < mulander> we split up the text into words and test their presence in text_words
+22:16 < mulander> if we find a matching word in the first column
+22:16 < mulander> ie. double
+22:16 < mulander> 44    { "double", "C program", "text/x-c" },
+22:17 < mulander> we eithr return the mime type from [2] if MAGIC_TEST_MIME was set, or the human readable name
+22:17 < mulander> and going back to our try_text
+22:17 < mulander> if we found something, set result
+22:18 < mulander> and default to text/plain if we found nothing else
+22:18 < mulander> and finally unknown
+22:18 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#try_unknown
+22:19 < mulander> just prints "data" or application/x-not-regular-file based on iflag
+22:20 < mulander> that's all for today, tomorrow we dive into magic tests
+22:20 < mulander> --- DONE ---

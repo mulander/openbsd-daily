@@ -1,0 +1,190 @@
+21:07 [Users #openbsd-daily]
+21:07 [@dlg           ] [ brynet         ] [ fdiskyou     ] [ kraucrow  ] [ phy1729  ] [ tdmackey_    ] 
+21:07 [ [EaX]         ] [ cengizIO       ] [ filwisher    ] [ kysse     ] [ pstef    ] [ Technaton    ] 
+21:07 [ __gilles      ] [ corbyhaas      ] [ flopper      ] [ landers2  ] [ rain1    ] [ thrym        ] 
+21:07 [ abecker       ] [ corsah         ] [ FRIGN        ] [ lteo[m]   ] [ rajak    ] [ timclassic   ] 
+21:07 [ acgissues     ] [ davl           ] [ fyuuri       ] [ lucias    ] [ Re[Box]  ] [ toddf        ] 
+21:07 [ administ1aitor] [ desnudopenguino] [ g0relike     ] [ luisbg    ] [ rEv9     ] [ TronDD       ] 
+21:07 [ akfaew        ] [ Dhole          ] [ geetam       ] [ mandarg   ] [ rgouveia ] [ TuxOtaku     ] 
+21:07 [ akkartik      ] [ dial_up        ] [ ghostyy      ] [ mattl     ] [ rnelson  ] [ ule          ] 
+21:07 [ antoon_i_     ] [ dmfr           ] [ ghugha       ] [ metadave  ] [ rwrc_    ] [ vbarros      ] 
+21:07 [ antranigv     ] [ dostoyevsky    ] [ H3ad4ch3     ] [ mikeb     ] [ ryan     ] [ VoidWhisperer] 
+21:07 [ apotheon      ] [ dsp            ] [ harrellc00per] [ mulander  ] [ S007     ] [ vyvup        ] 
+21:07 [ ar            ] [ DuClare        ] [ Harry        ] [ Naabed-_  ] [ salva0   ] [ weezelding   ] 
+21:07 [ azend|vps     ] [ dxtr           ] [ jbernard     ] [ nacci     ] [ SETW     ] [ whyt         ] 
+21:07 [ bcallah       ] [ dzho           ] [ jbgg         ] [ nacelle   ] [ shazaum  ] [ wilornel     ] 
+21:07 [ bcd           ] [ eau            ] [ job          ] [ nailyk    ] [ SHLL16   ] [ WubTheCaptain] 
+21:07 [ bch           ] [ ebag           ] [ jsing        ] [ nasuga    ] [ skrzyp   ] [ Yojimbo      ] 
+21:07 [ biniar        ] [ emigrant       ] [ jwit         ] [ Niamkik   ] [ smiles`  ] [ zelest       ] 
+21:07 [ brianpc       ] [ entelechy      ] [ kAworu       ] [ oldlaptop_] [ stateless] 
+21:07 [ brianritchie  ] [ epony          ] [ kittens      ] [ owa       ] [ t_b      ] 
+21:07 [ brtln         ] [ erethon        ] [ kl3          ] [ petrus_lt ] [ tarug0   ] 
+21:07 [ bruflu        ] [ fcambus        ] [ kpcyrd       ] [ philosaur ] [ tdjones  ] 
+21:07 -!- Irssi: #openbsd-daily: Total of 122 nicks [1 ops, 0 halfops, 0 voices, 121 normal]
+21:07 < mulander> --- code read: /usr/bin/file magic ---
+21:07 < mulander> *** read the code responsible for magic chcks in the file utility ***
+21:09 < mulander> the patch brynet prepared was committed today \o/ https://marc.info/?l=openbsd-cvs&m=149865784326363&w=2
+21:09 < mulander> this removed the child forking from the code
+21:10 < mulander> the thread discussing the change had a nice insight from Theo on how pledge design evolved https://marc.info/?l=openbsd-tech&m=149860062013146&w=2
+21:13 < mulander> now, bxr doesn't have the diff yet
+21:13 < mulander> but it doesn't matter for us
+21:13 < mulander> as we will be reading the magic code which was not touched
+21:14 < mulander> code: http://bxr.su/OpenBSD/usr.bin/file/
+21:14 < mulander> https://man.openbsd.org/file
+21:14 < mulander> https://man.openbsd.org/magic.5
+21:14 < mulander> man pages ^
+21:15 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#656 is our entry point
+21:15 < mulander> and we will jump to try_magic
+21:15 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#try_magic
+21:17 < mulander> and also let's keep in mind http://bxr.su/OpenBSD/usr.bin/file/file.c#try_magic
+21:18 < mulander> second link should have been http://bxr.su/s?refs=try_text&project=OpenBSD
+21:19 < mulander> both call in to magic_test
+21:20 < mulander> so let's look at that code
+21:20 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#1386
+21:20 < mulander> magic_test(struct magic *m, const void *base, size_t size, int flags)
+21:20 < mulander> there is a bitmask flags which we saw used for setting the type of test
+21:22 < mulander> when called from try_text we set it to MAGIC_TEST_TEXT and set MAGIC_TEST_MIME if the -i flag was passed
+21:23 < mulander> try_magic just sets the -i flag if required
+21:25 < mulander> first we define some structs and zero out the magic_state struct using memset
+21:25 < mulander> magic state is defined at http://bxr.su/OpenBSD/usr.bin/file/magic.h#163
+21:25 < mulander> has a 4k out buffer
+21:25 < mulander> a slot for the mimetype, and some other fields
+21:25 < mulander> that are not obvious yet but we might have some guesses
+21:26 < mulander> now let's recall what was the max size we read from a file?
+21:26 < rain1> 0.2 MB?
+21:26 < mulander> I think it was 0.6
+21:26 < mulander> let's check
+21:26 < mulander> I believe it was in load
+21:27 < mulander> 22/* Bytes to read if can't use the whole file. */
+21:27 < mulander> 23#define FILE_READ_SIZE (256 * 1024)
+21:27 < mulander> so that's in inf->size
+21:28 < mulander> and base is the actual buffer with the data read
+21:28 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#load_file
+21:28 < mulander> so that is passed as arguments to the magic test and stored in the magic_state struct
+21:28 < mulander> well a pointer to the buffer and it's size
+21:29 < mulander> int text in the ms struct seems to work as a boolean
+21:29 < mulander> we decode our flag into a value we can store in ms and test whether MAGIC_TEST_TEXT was set
+21:30 < mulander> now we see RB_FOREACH
+21:30 < mulander> https://man.openbsd.org/RB_FOREACH
+21:30 < mulander> this is a macro used for red black trees
+21:32 < mulander> RB_FOREACH(VARNAME, NAME, RB_HEAD *head);
+21:33 < mulander> so we iterate through magic_tree
+21:34 < mulander> starting at m->tree
+21:34 < mulander> and on each iteration ml is set to the value in the node
+21:35 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic.h#101 is where our tree is defined
+21:37 < mulander> I was now looking where inf->m where m->tree comes from is set and initialized
+21:37 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#412
+21:38 < mulander> and we can see it comes from 
+21:38 < mulander> http://bxr.su/OpenBSD/usr.bin/file/file.c#387
+21:38 < mulander> 387    m = magic_load(magicfp, magicpath, cflag || Wflag);
+21:38 < mulander> 388    if (cflag) {
+21:38 < mulander> 389        magic_dump(m);
+21:38 < mulander> 390        exit(0);
+21:38 < mulander> 391    }
+21:39 < mulander> let's see what magic load actually does
+21:39 < mulander> before moving on with the test
+21:39 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-load.c#1068
+21:41 < mulander> we allocate room for a magic struct using calloc which also zeroes the memory
+21:41 < mulander> we init the RB tree
+21:41 < mulander> set some helper variables to their initial state 
+21:42 < mulander> and proceed to process the magic file line by line
+21:43 < mulander> I'm doing a quick look at https://man.openbsd.org/fgetln
+21:44 < mulander> https://man.openbsd.org/fgetln#CAVEATS the caveats section
+21:45 < mulander> nicely explains the idiomatic while loop for that function
+21:45 < mulander> this covers the else branch with the temporary buffer being allocated
+21:46 < mulander> I'm now looking at /etc/magic on my system
+21:46 < mulander> I see the file has comments, and we can see code skipping blank lines and comments
+21:46 < mulander> there are !:mime directives for setting a mime type
+21:47 < mulander> some strength marker
+21:47 < mulander> https://man.openbsd.org/magic.5 the whole format is documented though
+21:48 < mulander> so no point deciphering from the code
+21:48 < mulander> what is interesting is how that maps to the tree
+21:48 < mulander> we work with `line`
+21:48 < mulander> which is a magic_line struct
+21:48 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic.h#104
+21:49 < mulander> our RB tree is composed of those
+21:50 < mulander> i.e. the literal string "!:mime" followed by the MIME type.
+21:50 < mulander> Some file formats contain additional information which is to be printed along with the file type or need additional tests to determine the true file type. These additional tests are introduced by one or more > characters preceding the offset. The number of > on the line indicates the level of the test; a line with no > at the beginning is considered to be at level 0. Tests are arranged in a 
+21:50 < mulander> tree-like hierarchy: If a test on a line at level n succeeds, all following tests at level n+1 are performed, and the messages printed if the tests succeed, until a line with level n (or less) appears. 
+21:51 < mulander> so each line read is turned into an actionable node
+21:52 < mulander> and we go down it's children performing tests until we pass or fail
+21:54 < mulander> we also have 2 trees
+21:54 < mulander> a magic_named_tree and a magic_tree
+21:55 < mulander> this is based on having ml->name
+21:55 < mulander> and that's parsed in magic_parse_value
+21:55 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-load.c#831
+22:00 < mulander> tryng to find what type of entry is considered named
+22:01 < mulander> to do that I need to check magic_parse_type
+22:01 < mulander> A string of bytes. The string type specification can be optionally followed by /[Bbc]*. The "B" flag compacts whitespace in the target, which must contain at least one whitespace character. If the magic has n consecutive blanks, the target needs at least n consecutive blanks to match. The "b" flag treats every blank in the target as an optional blank. Finally the "c" flag, specifies case 
+22:01 < mulander> insensitive matching: lowercase characters in the magic match both lower and upper case characters in the target, whereas upper case characters in the magic only match uppercase characters in the target.
+22:01 < mulander>  
+22:02 < mulander>  argh, sorry from the wrong paste
+22:02 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-load.c#639
+22:02 < mulander> we can see that type "name" and "use" are for naming
+22:03 < mulander> in my /etc/magic I can't find anything that I think would match this
+22:03 < mulander> as I assume it would have to have name or use as the value in the second column
+22:04 < mulander> it's also interesting
+22:04 < mulander> that https://man.openbsd.org/magic.5
+22:04 < mulander> doesn't document type 'name' or type 'use'
+22:05 < mulander> if anyone has info on it I would welcome feedback :)
+22:05 < mulander> while still here
+22:05 < mulander> I'm doing a scroll of http://bxr.su/OpenBSD/usr.bin/file/magic-load.c
+22:05 < mulander> to get a general feel of what it does and to see if I spot anything interesting
+22:06 < mulander> (I am mainly targeting the tests themselves so this is side info for now)
+22:06 < mulander> I see regex compilation code
+22:06 < mulander> in magic_make_pattern
+22:07 < mulander> strength is a scoring system it appears
+22:08 < mulander> reading this I wonder if this code has been fuzzzed with afl
+22:08 < mulander> as in fuzzing the magic file as input vs the target file
+22:08 < mulander> might be a fun thing to do on a weekend
+22:11 < mulander> ok back to our tests
+22:11 < mulander> for each rb node, we call magic_test_line
+22:12 < mulander> on the magic line passing it our magic state
+22:12 < mulander> we also make a check
+22:12 < mulander> ml->text == ms.text
+22:12 < mulander> so this makes sure that text checks are only performed against text data
+22:12 < mulander> and binary checks are only performed against binary data
+22:13 < mulander> let's see the magic
+22:13 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_test_line
+22:15 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-load.c#535 indirect type defaults to ' '
+22:15 < mulander> and is set to a value if we find bslBSL
+22:15 < mulander> Indirect offsets are of the form: (( x [.[bslBSL]][+-][ y ]). The value of x is used as an offset in the file. A byte, short or long is read at that offset depending on the [bslBSLm] type specifier. 
+22:16 < mulander> I don't have any in my /etc/magic file though
+22:18 < mulander> so without an indirect offset we read it from the magic state
+22:19 < mulander> with it, we use the indirect parsed one
+22:19 < mulander> we then continue with the relative moves
+22:21 < mulander> now after positioning ourselves we call magic_test_functions
+22:21 < kl3> see magic(4) for types 'name' and 'use'
+22:22 < mulander> https://man.openbsd.org/?query=magic&apropos=1&sec=0&arch=default&manpath=OpenBSD-current
+22:22 < mulander> kl3: is that on a non OpenBSD box?
+22:22 < mulander> or are you referring for something else than man?
+22:22 < mulander> ah linux documents it
+22:22 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:22 < mulander>               name        Define a ``named'' magic instance that can be called from another use magic entry, like a subroutine call.  Named instance direct magic offsets are relative to the offset of the previous
+22:22 < mulander>                           matched entry, but indirect offsets are relative to the beginning of the file as usual.  Named magic entries always match.
+22:22 < mulander>               use         Recursively call the named magic starting from the current offset.  If the name of the referenced begins with a ^ then the endianness of the magic is switched; if the magic mentioned leshort
+22:22 < mulander>                           for example, it is treated as beshort and vice versa.  This is useful to avoid duplicating the rules for different endianness.
+22:23 < mulander> kl3: thanks, didn't think to check on linux
+22:23 < mulander> (still magic(5) at least on the box I tested on)
+22:24 < mulander> omg
+22:24 < mulander> is this thing turing complete?
+22:24 < mulander> :D
+22:27 < mulander> wonder if anything else is using the magic files directly
+22:27 < mulander> in a similar way that file does
+22:27 < mulander> ok back to the code
+22:27 < mulander> there are a bunch of test functions
+22:27 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_test_functions
+22:27 < mulander> that can be called by each magic line
+22:30 < mulander> scrolling throuhg magic-test.c
+22:30 < mulander> don't think we wouldn't benefit much by going line by line on each of it
+22:32 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#1343 back to our test code
+22:33 < mulander> so reading it seems that -1 failed checks
+22:34 < mulander> -2 not implemented
+22:34 < mulander> test_not is a reversed condition
+22:35 < mulander> fun fact
+22:35 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_test_functions search for -2
+22:35 < mulander> there is a bunch of unimplemented checks
+22:36 < mulander> let's stop at http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#1359 for today
+22:37 < mulander> and continue on child tests and that use caller for tomorrow
+22:37 < mulander> and seing if openbsd ships any tests that are not implemented (as in if /etc/magic contains such checks)
+22:37 < mulander> --- DONE ---

@@ -1,0 +1,176 @@
+21:06 [Users #openbsd-daily]
+21:06 [@dlg           ] [ cengizIO   ] [ flopper      ] [ landers2 ] [ quinq    ] [ Technaton    ] 
+21:06 [ __gilles      ] [ corbyhaas  ] [ FRIGN        ] [ lteo[m]  ] [ rain1    ] [ thrym        ] 
+21:06 [ abecker       ] [ davl       ] [ fyuuri       ] [ lucias   ] [ Re[Box]  ] [ timclassic   ] 
+21:06 [ acgissues     ] [ debb75     ] [ g0relike     ] [ luisbg   ] [ rEv9     ] [ TronDD       ] 
+21:06 [ administ1aitor] [ Dhole      ] [ geetam       ] [ mandarg  ] [ rgouveia_] [ TuxOtaku     ] 
+21:06 [ akfaew        ] [ dial_up    ] [ ghostyy      ] [ mattl    ] [ rnelson  ] [ ule          ] 
+21:06 [ akkartik      ] [ dmfr       ] [ ghugha       ] [ metadave ] [ ryan     ] [ vbarros      ] 
+21:06 [ antoon_i      ] [ dostoyevsky] [ Guest96088   ] [ mikeb    ] [ S007     ] [ vyvup        ] 
+21:06 [ antranigv     ] [ dsp        ] [ harrellc10per] [ mulander ] [ SETW     ] [ weezelding   ] 
+21:06 [ apotheon      ] [ DuClare    ] [ Harry        ] [ Naabed-_ ] [ shazaum  ] [ whyt         ] 
+21:06 [ ar            ] [ duncaen    ] [ horia        ] [ nacci    ] [ sid77    ] [ Wilawar      ] 
+21:06 [ azend|vps     ] [ dxtr       ] [ jbernard     ] [ nacelle  ] [ skrzyp   ] [ wilornel     ] 
+21:06 [ bcd           ] [ eau        ] [ jsing        ] [ nailyk   ] [ smiles`  ] [ WubTheCaptain] 
+21:06 [ bch           ] [ ebag_      ] [ jwit         ] [ Niamkik  ] [ Soft     ] [ xor29ah      ] 
+21:06 [ biniar        ] [ emigrant   ] [ kAworu       ] [ ob-sed   ] [ stateless] [ zelest       ] 
+21:06 [ brianpc       ] [ entelechy  ] [ kittens      ] [ oldlaptop] [ swankier ] 
+21:06 [ brianritchie  ] [ erethon    ] [ kl3          ] [ owa      ] [ t_b      ] 
+21:06 [ brtln         ] [ eyl        ] [ kpcyrd       ] [ petrus_lt] [ tarug0   ] 
+21:06 [ bruflu        ] [ fcambus    ] [ kraucrow     ] [ phy1729  ] [ tdjones  ] 
+21:06 [ brynet        ] [ filwisher  ] [ kysse        ] [ qbit     ] [ tdmackey_] 
+21:06 -!- Irssi: #openbsd-daily: Total of 115 nicks [1 ops, 0 halfops, 0 voices, 114 normal]
+21:06 < mulander> --- code read: sendbug ---
+21:07 < mulander> *** goal: general read of the sendbug utility ***
+21:07 < mulander> code: http://bxr.su/OpenBSD/usr.bin/sendbug/sendbug.c
+21:07 < mulander> version: /*  $OpenBSD: sendbug.c,v 1.77 2016/10/18 20:07:35 kettenis Exp $   */
+21:07 < mulander> man: https://man.openbsd.org/sendbug
+21:08 < mulander> sendbug is a small program split into 2 files
+21:08 < mulander> used to report bugs for the openbsd operating system
+21:08 < mulander> let's go top to bottom with it
+21:08 < mulander> first we see a bunch of includes in style(9) order
+21:09 < mulander> then atomicio.h which is the second part of the program
+21:09 < mulander> we will go there later
+21:09 < mulander> _PATH_DMESG is set to /var/run/dmesg.boot
+21:10 < mulander> DMESG_START set to 'OpenBSD '
+21:10 < mulander> and other defines for base64 encoding
+21:10 < mulander> we see a const char *categories initialized to a set of sections
+21:10 < mulander> 46const char *categories = "system user library documentation kernel "
+21:10 < mulander> 47    "alpha amd64 arm hppa i386 m88k mips64 powerpc sh sparc sparc64 vax";
+21:11 < mulander> and a  *comment[] array of comments
+21:11 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:11 < mulander> 48const char *comment[] = {
+21:11 < mulander> 49    "<synopsis of the problem (one line)>",
+21:11 < mulander> 50    "<PR category (one line)>",
+21:11 < mulander> 51    "<precise description of the problem (multiple lines)>",
+21:11 < mulander> 52    "<code/input/activities to reproduce the problem (multiple lines)>",
+21:11 < mulander> 53    "<how to correct or work around the problem, if known (multiple lines)>"
+21:11 < mulander> 54};
+21:11 < mulander> next we see some global structs/variables
+21:12 < mulander> like passwd, some buffers etc
+21:12 < mulander> a __dead usage definition
+21:12 < mulander> printing the help screen for the program
+21:12 < mulander> cleanup() calling into some other functions probably to cleanup
+21:12 < mulander> and finally main on line 80
+21:12 < mulander> the prograam gets an initial wide pledge
+21:12 < mulander> 88    if (pledge("stdio rpath wpath cpath tmppath getpw proc exec", NULL) == -1)
+21:13 < mulander> 89        err(1, "pledge");
+21:13 < mulander> we see getopt handling for DEP flags
+21:13 < mulander> they are documented on https://man.openbsd.org/sendbug
+21:14 < mulander> now first exec path
+21:14 < mulander> if -P is provided
+21:14 < mulander> we can call init(), then template on stdout and exit
+21:14 < mulander> if that didn't happen
+21:15 < mulander> we would create a temporary file using mkstemp
+21:15 < mulander> and call our cleanup atexit
+21:15 < mulander> so the cleanup code we saw makes sure the temporary files get nuked
+21:15 < mulander> we then call init
+21:15 < mulander> and go forward
+21:16 < mulander> reading the PR_FORM env variable
+21:16 < mulander> Filename of PR form to use instead of using the built-in form. Such a PR form can be partially pre-completed to make the process faster
+21:16 < mulander> as defined by sendbug man page
+21:16 < mulander> if PR_FORM is defined
+21:16 < mulander> we open it for reading (As a file)
+21:17 < mulander> and raed it line by line until end of file
+21:17 < mulander> writing it out to buf
+21:18 < mulander> looking up how BUFSIZ is defined we can assume it's up to 1024 bytes
+21:19 < mulander> we make sure the data is fflushed to the file
+21:19 < mulander> update the modification time
+21:19 < mulander> and go to the edit section
+21:19 < mulander> when editit probably calls a text editor and waits for it's exit
+21:19 < mulander> passing tmppath to the editor to open
+21:19 < mulander> after theeditor is done, we call stat on the temp file
+21:20 < mulander> if the timestamp is not changed we bail out with 'report unchanged, nothing sent'
+21:20 < mulander> then we move to prompt: label
+21:20 < mulander> which calls checkfile on the temp path
+21:20 < mulander> calls prompt
+21:20 < mulander> and switches on the reply
+21:20 < mulander> for a or end of file, it bails out from the report
+21:21 < mulander> for e, it jumps back to edition
+21:21 < mulander> for s it calls sendmail and jumps to quit
+21:21 < mulander> by default it loops back to the prompt
+21:21 < mulander> next up L190, dmesg
+21:21 < mulander> this is a helper function
+21:22 < mulander> it opens up the _PATH_DMESG we saw before for reading
+21:22 < mulander> that is already filled
+21:23 < mulander> 29#define DMESG_START "OpenBSD "
+21:23 < mulander> 209        if (!strncmp(DMESG_START, buf, sizeof(DMESG_START) - 1))
+21:23 < mulander> so the loop
+21:23 < mulander> 202    /* Find last dmesg. */
+21:23 < mulander> reads lines from the dmesg
+21:24 < mulander> until the file is done
+21:24 < mulander> and ups the offset marker after each line starting with "OpenBSD "
+21:24 < mulander> as the file can contain dmesg from mor than one boot
+21:26 < mulander> if we found at least one dmesg
+21:26 < mulander> we will copy lines from the offset to the end of file to 'buf'
+21:26 < mulander> up to 1024 bytes
+21:27 < mulander> L229 usbdevs
+21:27 < mulander> this one actually calls a utility by creating a pipe
+21:27 < mulander> usbdevs -v
+21:28 < mulander> we then read each line of the output and write it to buf up to 1024 bytes
+21:28 < mulander> L254 editit
+21:28 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:28 < mulander> 46
+21:28 < mulander> 247/*
+21:28 < mulander> 248 * Execute an editor on the specified pathname, which is interpreted
+21:28 < mulander> 249 * from the shell.  This means flags may be included.
+21:28 < mulander> 250 *
+21:28 < mulander> 251 * Returns -1 on error, or the exit value on success.
+21:28 < mulander> 252 */
+21:29 < mulander> argp is initialized with "sh", "-c", null, null
+21:29 < mulander> so call shell with -c and 2 arguments
+21:29 < mulander> ed is set to VISUAL
+21:29 < mulander> if that is not set it grabs EDITOR
+21:29 < mulander> if not set it defaults to _PATH_VI
+21:29 < mulander>  #define_PATH_VI"/usr/bin/vi" macro 
+21:30 < mulander> finally it will use the path passed to the function
+21:30 < mulander> we then register signals
+21:31 < mulander> fork the shell command
+21:31 < mulander> wait for hte user to finish editing
+21:32 < mulander> and have some signal cleanup
+21:33 < mulander> next up prompt on line 300
+21:33 < mulander> we prompt the user for abort, edit or send
+21:33 < mulander> and grab the next action
+21:33 < mulander> moving on
+21:34 < mulander> sendmail line 317
+21:34 < mulander> we open up a pipe for communication
+21:35 < mulander> fork and based on the result
+21:35 < mulander> bail with an error
+21:36 < mulander> for 0 we call sendmail directly
+21:36 < mulander> for all other paths we call send_file
+21:36 < mulander> we will get to that
+21:36 < mulander> next up init
+21:37 < mulander> we grab our user name into pw
+21:37 < mulander> we get the OS version by calling the kern ostype sysctl
+21:37 < mulander> we get the release by calling kern orelease ysctl
+21:38 < mulander> $ sysctl kern.ostype
+21:38 < mulander> kern.ostype=OpenBSD
+21:38 < mulander> $ sysctl kern.osrelease
+21:38 < mulander> kern.osrelease=6.1
+21:38 < mulander> for reference
+21:38 < mulander> we then grab kern.version via sysctl
+21:38 < mulander> and hw.machine
+21:42 < mulander> ok now sendfile L405
+21:42 < mulander> we open up the passed file, read it line by line
+21:42 < mulander> each read line is copied to the lbuf output
+21:42 < mulander> we skip lines starting with SENDBUG
+21:44 < mulander> values inside <> are consumed as they are considered user proided
+21:44 < mulander> *provided
+21:45 < mulander> and finally written out
+21:45 < mulander> L477 matchline
+21:45 < mulander> 473 * Does line start with `s' and end with non-comment and non-whitespace?
+21:45 < mulander> 474 * Note: Does not treat `line' as a C string.
+21:45 < mulander> self explanatory with comments
+21:46 < mulander> L511
+21:46 < mulander> 507/*
+21:46 < mulander> 508 * Are all required fields filled out?
+21:46 < mulander> 509 */
+21:46 < mulander> same
+21:46 < mulander> L544 template
+21:47 < mulander> composes the final message
+21:47 < mulander> L597 hwdump
+21:47 < mulander> calls acpidump to get more data
+21:48 < mulander> and L631 debase
+21:49 < mulander> base 64 encoding handling
+21:49 < mulander> that pretty much covers sendbug
+21:49 < mulander> --- DONE ---
