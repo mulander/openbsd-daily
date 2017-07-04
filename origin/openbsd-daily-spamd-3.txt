@@ -1,0 +1,82 @@
+21:12 [Users #openbsd-daily]
+21:12 [@dlg         ] [ bruflu         ] [ epony        ] [ kAworu  ] [ Niamkik   ] [ stateless    ] 
+21:12 [ [EaX]       ] [ brynet         ] [ erethon      ] [ kittens ] [ nnplv     ] [ t_b          ] 
+21:12 [ __gilles    ] [ cengizIO       ] [ fcambus      ] [ kl3     ] [ nopacienc3] [ tarug0       ] 
+21:12 [ abecker     ] [ corbyhaas      ] [ fdiskyou     ] [ kpcyrd  ] [ oldlaptop_] [ tdmackey_    ] 
+21:12 [ akfaew      ] [ corsah         ] [ filwisher    ] [ kraucrow] [ owa       ] [ Technaton    ] 
+21:12 [ akkartik    ] [ davl           ] [ flopper      ] [ kysse   ] [ petrus_lt ] [ thrym        ] 
+21:12 [ antoon_i_   ] [ desnudopenguino] [ FRIGN        ] [ kzisme  ] [ philosaur ] [ timclassic   ] 
+21:12 [ antranigv   ] [ Dhole          ] [ fyuuri       ] [ landers2] [ phy1729   ] [ tobias_      ] 
+21:12 [ apelsin     ] [ dial_up        ] [ g0relike     ] [ lteo[m] ] [ pstef     ] [ toddf        ] 
+21:12 [ apotheon    ] [ dmfr           ] [ geetam       ] [ lucias  ] [ qbit      ] [ toorop       ] 
+21:12 [ ar          ] [ dostoyevsky    ] [ ghostyy      ] [ mandarg ] [ rain1     ] [ TronDD       ] 
+21:12 [ azend|vps   ] [ dsp            ] [ ghugha       ] [ mattl   ] [ Re[Box]   ] [ TuxOtaku     ] 
+21:12 [ bcallah     ] [ DuClare        ] [ Guest77833   ] [ metadave] [ rEv9      ] [ vbarros      ] 
+21:12 [ bcd         ] [ duncaen        ] [ harrellc00per] [ mikeb   ] [ rgouveia  ] [ VoidWhisperer] 
+21:12 [ bch         ] [ dunderproto    ] [ Harry_       ] [ moch    ] [ rnelson   ] [ vyvup        ] 
+21:12 [ biniar      ] [ dxtr           ] [ holsta       ] [ mulander] [ rwrc_     ] [ weezelding   ] 
+21:12 [ BlackFrog   ] [ dzho           ] [ ija          ] [ Naabed-_] [ ryan      ] [ wilornel     ] 
+21:12 [ bluewizard  ] [ eau            ] [ jbernard     ] [ nacci   ] [ S007      ] [ Yojimbo      ] 
+21:12 [ brianpc     ] [ ebag           ] [ job          ] [ nacelle ] [ salva0    ] [ zelest       ] 
+21:12 [ brianritchie] [ emigrant       ] [ jsing        ] [ nailyk  ] [ skrzyp    ] 
+21:12 [ brtln       ] [ entelechy      ] [ jwit         ] [ nasuga  ] [ smiles`   ] 
+21:12 -!- Irssi: #openbsd-daily: Total of 124 nicks [1 ops, 0 halfops, 0 voices, 123 normal]
+21:12 < mulander> --- code read: spamd hunting db bloat ---
+21:13 < mulander> *** we know we have a bloated db up to 491 MB, let's try to track it down ***
+21:17 < mulander> trying to locate where I downloaded my spamdb file
+21:18 < mulander> found it
+21:19 < mulander> just out of curiosity I tried
+21:19 < mulander> [mulander@napalm junk]$ db_dump spamd.db 
+21:19 < mulander> db_dump: BDB0210 spamd.db: metadata page checksum error
+21:19 < mulander> db_dump: BDB5115 open: spamd.db: Invalid argument
+21:20 < mulander> on a linux box
+21:24 < mulander> so from hexxdump we know that most of the data is either binary 00 or ff
+21:26 < mulander> [mulander@napalm junk]$ ls -alh spamd.db gzip.db.gz 
+21:26 < mulander> -rw-r--r-- 1 mulander mulander 534K Jul  2 21:23 gzip.db.gz
+21:26 < mulander> -rw-r--r-- 1 mulander mulander 492M Jul  1 22:47 spamd.db
+21:26 < mulander> to the point where gzipping it leaves us with a 534k file.
+21:27 < mulander> there are a few venues we can take with this
+21:27 < mulander> a) write an utility that will open the db, and make a copy of it using the same api writing each result to a new db file of the same format and see if it reproduces the problem
+21:27 < mulander> b) same program but just writing random data
+21:28 < mulander> c) diving into the code that made our db (the bgpd whitelist propagation)
+21:28 < mulander> I am of course open to more suggestions
+21:29 < mulander> no suggestions, so I will default to a
+21:31 < mulander> we will take https://junk.tintagel.pl/spamdb-2.c as base
+21:31 < mulander> as it already iterates over the records
+21:32 < tobias_> i'm no expert with spamdb code, but is it supposed to remove only one entry while adding puts two elements?
+21:33 < tobias_> line 80 compared to line 162. what is this gdata?
+21:34 < mulander> what file are you looking at?
+21:35 < tobias_> usr.sbin/spamdb/spamdb.c
+21:36 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/spamdb.c#162
+21:37 < mulander> http://bxr.su/OpenBSD/libexec/spamd/grey.h#39 for gdata
+21:37 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:37 < mulander> 39struct gdata {
+21:37 < mulander> 40    int64_t first;  /* when did we see it first */
+21:37 < mulander> 41    int64_t pass;   /* when was it whitelisted */
+21:37 < mulander> 42    int64_t expire; /* when will we get rid of this entry */
+21:37 < mulander> 43    int bcount;     /* how many times have we blocked it */
+21:37 < mulander> 44    int pcount;     /* how many times passed, or -1 for spamtrap */
+21:37 < mulander> 45};
+21:37 < mulander> I assume it's 'greylisting data'
+21:37 < mulander> but that code is not what created our db
+21:38 < mulander> that's why I mentioned option c
+21:38 < mulander> spamdb is the utility an admin uses to work with or introspect the spamdb file
+21:38 < mulander> the rest is done by the spamdb daemon
+21:38 < mulander> or the bgpd daemon in my case when syncing the whitelist
+21:39 < tobias_> okay
+21:41 < mulander> oviously all of them would be using the bdb api to make entries
+21:47 < mulander> http://man.openbsd.org/dbopen for our db api
+22:08 < mulander> the code is running
+22:08 < mulander> roughly added a dbopen for a new file and a ndb->put for the new db
+22:13 < mulander> takes ages to run
+22:13 < mulander> let me put the file up for review while it's runnin
+22:14 < mulander> https://junk.tintagel.pl/spamdb-3.c
+22:14 < mulander> it's currently iterating ove the 491 M db
+22:14 < mulander> it's eating around 70-80% CPU
+22:15 < mulander> the file on disk is 0B (nspam.db) it will grow on write
+22:17 < tobias_> yes, there is no db->sync in your code
+22:18 < tobias_> would just make it slower, i assume
+22:20 < mulander> probably true
+22:20 < mulander> will let it run and inspect the results later
+22:20 < mulander> unfortunately out of time today :(
+22:20 < mulander> --- DONE ---

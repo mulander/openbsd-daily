@@ -40,6 +40,10 @@ You can find original raw IRC logs here:
  * 2017-06-26: https://junk.tintagel.pl/openbsd-daily-file-1.txt by @mulander
  * 2017-06-27: https://junk.tintagel.pl/openbsd-daily-file-2.txt by @mulander
  * 2017-06-28: https://junk.tintagel.pl/openbsd-daily-file-3.txt by @mulander
+ * 2017-06-29: https://junk.tintagel.pl/openbsd-daily-file-4.txt by @mulander
+ * 2017-06-30: https://junk.tintagel.pl/openbsd-daily-spamd-1.txt by @mulander
+ * 2017-07-01: https://junk.tintagel.pl/openbsd-daily-spamd-2.txt by @mulander
+ * 2017-07-02: https://junk.tintagel.pl/openbsd-daily-spamd-3.txt by @mulander
 
 Copies of these logs are available on this repository in `origin` directory.
 

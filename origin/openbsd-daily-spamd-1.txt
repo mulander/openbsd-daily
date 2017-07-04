@@ -1,0 +1,224 @@
+21:04 [Users #openbsd-daily]
+21:04 [@dlg         ] [ cengizIO       ] [ erethon      ] [ kl3       ] [ oldlaptop_] [ SpikeHeron   ] 
+21:04 [ [EaX]       ] [ corbyhaas      ] [ fcambus      ] [ kpcyrd    ] [ owa       ] [ stateless    ] 
+21:04 [ __gilles    ] [ corsah         ] [ fdiskyou     ] [ kraucrow  ] [ petrus_lt ] [ t_b          ] 
+21:04 [ abecker     ] [ davl           ] [ filwisher    ] [ kysse     ] [ philosaur ] [ tarug0       ] 
+21:04 [ akfaew      ] [ desnudopenguino] [ flopper      ] [ landers2  ] [ phy1729   ] [ tdmackey_    ] 
+21:04 [ akkartik    ] [ Dhole          ] [ fyuuri       ] [ lteo[m]   ] [ pstef     ] [ Technaton    ] 
+21:04 [ antoon_i_   ] [ dial_up        ] [ g0relike     ] [ lucias    ] [ rain1     ] [ thrym        ] 
+21:04 [ antranigv   ] [ dmfr           ] [ geetam       ] [ luisbg    ] [ rajak     ] [ timclassic   ] 
+21:04 [ apotheon    ] [ dostoyevsky    ] [ ghostyy      ] [ mandarg   ] [ Re[Box]   ] [ toddf        ] 
+21:04 [ ar          ] [ dsp            ] [ ghugha       ] [ mattl     ] [ rEv9      ] [ toorop       ] 
+21:04 [ azend|vps   ] [ DuClare        ] [ harrellc00per] [ metadave  ] [ rgouveia  ] [ TronDD       ] 
+21:04 [ bcallah     ] [ duncaen        ] [ Harry        ] [ mikeb     ] [ rnelson   ] [ TuxOtaku     ] 
+21:04 [ bcd         ] [ dunderproto    ] [ holsta       ] [ mulander  ] [ rwrc_     ] [ vbarros      ] 
+21:04 [ bch         ] [ dxtr           ] [ jaypatelani  ] [ Naabed-_  ] [ ryan      ] [ VoidWhisperer] 
+21:04 [ biniar      ] [ dzho           ] [ jbernard     ] [ nacci     ] [ S007      ] [ vyvup        ] 
+21:04 [ brianpc     ] [ eau            ] [ job          ] [ nacelle   ] [ salva0    ] [ weezelding   ] 
+21:04 [ brianritchie] [ ebag           ] [ jsing        ] [ nailyk    ] [ SETW      ] [ wilornel     ] 
+21:04 [ brtln       ] [ emigrant       ] [ jwit         ] [ nasuga    ] [ skizye_   ] [ Yojimbo      ] 
+21:04 [ bruflu      ] [ entelechy      ] [ kAworu       ] [ Niamkik   ] [ skrzyp    ] [ zelest       ] 
+21:04 [ brynet      ] [ epony          ] [ kittens      ] [ nopacienc3] [ smiles`   ] 
+21:04 -!- Irssi: #openbsd-daily: Total of 119 nicks [1 ops, 0 halfops, 0 voices, 118 normal]
+21:04 < mulander> --- code read: spamd ---
+21:04 < mulander> *** goal: the overall goal is to dive into an error I was hitting a long time ago https://marc.info/?t=143015818200003&r=1&w=2
+21:04 < mulander> *** but we do want to cover all of spamd, so todays read will be an overall look ***
+21:05 < mulander> man: https://man.openbsd.org/spamd the daemon
+21:05 < mulander> man: https://man.openbsd.org/spamdb utility for working with the spam database
+21:06 < mulander> man: https://man.openbsd.org/spamd-setup.8 configuration for the daemon
+21:06 < mulander> man: https://man.openbsd.org/spamd.conf.5 configuration file format
+21:08 < mulander> now, let's locate the code
+21:09 < mulander> I know about the spamdb utility and that was quick to find
+21:09 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/
+21:09 < mulander> I didn't know where to look for the rest, so I took a look at /etc/rc.d/spamd
+21:10 < mulander> http://bxr.su/OpenBSD/etc/rc.d/spamd#5
+21:10 < mulander> which clued me in on the /usr/libexec
+21:13 < mulander> http://bxr.su/OpenBSD/libexec/spamd/ - for the daemon
+21:14 < mulander> http://bxr.su/OpenBSD/libexec/spamd-setup/ - for the setup
+21:14 < mulander> http://bxr.su/OpenBSD/libexec/spamlogd/ - for logging
+21:14 < mulander> man: https://man.openbsd.org/spamlogd.8 - forgot to link this one
+21:16 < mulander> ok, so I assume most people are familiar with spamd
+21:17 < mulander> in short, this is a fake mail server, it rejects email and tells the sender to retry later
+21:17 < mulander> most spammers don't care and never retry
+21:18 < mulander> so by default that host would get greylisted and promoted to a whitelist if he conforms to the checks
+21:19 < mulander> there's also a mode for blacklisting
+21:19 < mulander> blacklisted hosts are communiated with ultra slowly
+21:19 < mulander> making them loose time trying to send spam via us, just to get failed later
+21:20 < mulander> let's start with spamdb
+21:20 < mulander> it's a small utility 
+21:20 < mulander> my server still has a huge whitelist
+21:21 < mulander> as I have http://bgp-spamd.net/ configured to sync a whitelist (this helps with emails from google)
+21:23 < mulander> huh, amazing, my spamd is 491M
+21:23 < mulander> $ ls -alh /var/db/spamd 
+21:23 < mulander> -rw-r--r--  1 _spamd  _spamd   491M Jul 21  2015 /var/db/spamd
+21:23 < mulander> I didn't check it in a long while
+21:24 < mulander> so that's an interesting thing to clutch on
+21:24 < mulander> why is it that big
+21:24 < mulander> especially since I have spamd disabled and just syncing whitelists
+21:26 < mulander> I'm cross checking my old email
+21:27 < mulander> to see if I pointed out that I think the db is growing a bit fast
+21:28 < mulander> not really, ok
+21:28 < mulander> the file is of course binary
+21:29 < mulander> let's see if spamdb can tell us something about it
+21:29 < mulander> If invoked without any arguments, spamdb lists the contents of the database in a text format.
+21:29 < mulander> $ spamdb | wc -l
+21:29 < mulander>       80
+21:30 < mulander> so it's 491M for 80 entries, that doesn't look healthy to me
+21:31 < mulander> sample output
+21:31 -!- Irssi: Pasting 5 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:31 < mulander> $ spamdb
+21:31 < mulander> WHITE|209.85.213.178|||1436470890|1436470890|1439581290|1|0
+21:31 < mulander> WHITE|218.77.79.43|||1435436502|1435436502|1438977628|1|5
+21:31 < mulander> WHITE|108.174.3.162|||1436760300|1436760300|1439870700|1|0
+21:31 < mulander> WHITE|108.174.3.165|||1437393941|1437393941|1440504341|1|0
+21:34 < mulander> it takes 52 seconds to even list those entries
+21:34 < mulander> ok we have a general feel, will see what spamdb does
+21:34 < mulander> focusing on the listing part today
+21:35 < mulander> and to learn something about the database format
+21:35 < mulander> our first goal overall will b to learn why an entry with 80 white listed hosts takes 491 M of hdd space.
+21:35 < mulander> also since we just finished with file
+21:35 < mulander> lets run it on this
+21:36 < mulander> $ file /var/db/spamd        
+21:36 < mulander> /var/db/spamd: Berkeley DB 1.85 (Hash, version 2, native byte-order)
+21:40 < mulander> off to the code
+21:40 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/
+21:40 < mulander> makefile, man page and the main program
+21:40 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/spamdb.c
+21:41 < mulander> includes miss the space separating sys, net and others from style(9), worth to remember if we decide to change something here
+21:41 < mulander> should also be sorted
+21:41 < mulander> forward declaration of dblist and dbupdate
+21:42 < DuClare> Was some new simple db committed or proposed on tech at some point?  Or were I dreaming..
+21:42 < mulander> I only saw the one removing sqlite from base
+21:43 < mulander> might have missed others DuClare 
+21:43 < mulander> btw I am willing to distribute the spamdb file 'on demand' to people who request it
+21:43 < mulander> but won't host it publicly
+21:43 < mulander> if someone wants to dive int othe binary itself
+21:45 < mulander> ok back to the code
+21:45 < mulander> I don't see a reason for dblist and dbupdate to be forward declared.
+21:46 < mulander> so this could also be dropped
+21:46 < mulander> dbupdate - checking the man page
+21:47 < mulander> spamdb it seems can add, update and delete keys
+21:48 < mulander> in dbupdate, we take a db, ip, flag for adding, and a type
+21:48 < mulander> grab the current time, zero out the hints addrinfo struct
+21:49 < mulander> if we are 'adding' an entry, we and the type is a TRAPHIT or  WHITE
+21:49 < mulander> we do a getaddrinfo call
+21:49 < mulander> https://man.openbsd.org/getaddrinfo
+21:50 < mulander> The getaddrinfo() function is used to get a list of IP addresses and port numbers for host hostname and service servname. It is a replacement for and provides more flexibility than the gethostbyname(3) and getservbyname(3) functions.
+21:50 < mulander> if the ip we have is invalid we jump to bad
+21:50 < mulander> and bad just bails out from adding with a 1 return value
+21:51 < mulander> next if we are not adding an entry, we grab th key from the db
+21:51 < mulander> if the key is non existent we warn and jump to bad
+21:52 < mulander> we then attempt to delete the key and jump to bad with a warning if we fail to do so
+21:53 < mulander> otherwise we are adding
+21:53 < mulander> so based on type we set an expire time
+21:53 < mulander> which is the current time modified by the type offset
+21:53 < mulander> I assume expire 0 is 'never'
+21:54 < mulander> there are som trivial sanity checks before saving
+21:54 < mulander> for SPAMTRAP
+21:54 < mulander> making sure the address has a @
+21:54 < mulander> and is all lowercase
+21:54 < mulander> (it is actually lower casing it)
+21:55 < mulander> hmm
+21:55 < mulander> wonder why it's stored in a variable named ip and not email
+21:58 < mulander> # spamdb -T -a 'spamtrap@mydomain.org'
+21:58 < mulander> from the man for spamd
+21:59 < mulander> Spamtrap addresses are added to the /var/db/spamd database with the following spamdb(8) command:
+21:59 < mulander> wonder if add indicates adding a 'spamtrap' address
+21:59 < mulander> possibly the parameter is overloaded depending if adding or removing?
+22:01 < mulander> there are 2 call sites for this function
+22:01 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/spamdb.c#335
+22:01 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/spamdb.c#326
+22:01 < mulander> it switches on action
+22:01 < mulander> and uses argv[i] for the value passed
+22:02 < mulander> 'a' is setting action = 1
+22:02 < mulander> 'd' is setting action = 2
+22:02 < mulander> Add or update the entries for keys. This can be used to whitelist one or more IP addresses (i.e. circumvent the greylisting process altogether) by adding all IP addresses as keys to the spamd database for WHITE entries. If any keys specified match entries already in the spamd database, spamdb updates the entry's time last seen to now.
+22:02 < mulander> that's for 'a'
+22:02 < mulander> now 'd'
+22:02 < mulander>  
+22:02 < mulander> -d keys
+22:02 < mulander> Delete entries for keys.
+22:03 < mulander> If adding or deleting a SPAMTRAP address (-T), keys should be specified as email addresses:
+22:03 < mulander> spamtrap@mydomain.org
+22:03 < mulander> Otherwise keys must be numerical IP addresses.
+22:03 < mulander> so yes they seem overloaded (the ip parameter)
+22:04 < mulander> so that's why the getaddrinfo check was limited to TRAPHIT or WHITE
+22:04 < mulander> if (add && (type == TRAPHIT || type == WHITE)) { could be simplified to add && type != SPAMTRAP
+22:05 < mulander>  gd.expire = 0; /* XXX */ the XXX next to SPAMTRAP expire is interesting
+22:05 < mulander> keeeping that in mind for  the future
+22:06 < mulander> 133            if (gdcopyin(&dbd, &gd) == -1) {
+22:06 < mulander> 134                /* whatever this is, it doesn't belong */
+22:06 < mulander> 135                db->del(db, &dbk, 0);
+22:06 < mulander> 136                goto bad;
+22:06 < mulander> 137            }
+22:06 < mulander> is the code I'm checking now
+22:06 < mulander> it's defined in
+22:06 < mulander> http://bxr.su/OpenBSD/libexec/spamd/gdcopy.c#25
+22:06 < mulander> this looks like some migration code?
+22:07 < mulander> ok so this migrates the format, if it sees something it doesn't understand
+22:07 < mulander> it returns -1
+22:08 < mulander> making spamdb attempting to remove it completely
+22:09 < mulander> k, that covers dbupdate
+22:09 < mulander> let's look at list
+22:09 < mulander> http://bxr.su/s?refs=dblist&project=OpenBSD
+22:13 < mulander> - /* walk db, list in text format */
+22:13 < mulander> we zero out 2 structures of tpe DBT
+22:13 < mulander> and iterate over it using db->seq
+22:14 < mulander> for each entry, if we have a size < 1 then we bail out with an error
+22:14 < mulander> or if we see an entry in an unkown format
+22:14 < mulander> so now we know our 491 M db doesn't contain unkown entries or we would jump out with an error here when listing it
+22:16 -!- rnelson_ is now known as rnelson
+22:16 < mulander> whe then allocate a text array an copy the data into it
+22:16 < mulander> zero terminating the string
+22:17 < mulander> we then check if the entry contains a new line
+22:17 < mulander> if not, then 'this is a nono-greylist entry'
+22:17 < mulander> we go through gd.pcount
+22:17 < mulander> and for each value print
+22:17 < mulander> TRAPPED, SPAMTRAP or WHITE
+22:17 < mulander> with related info
+22:17 < mulander> we default to whitelist
+22:18 < mulander> our db doesn't have a non WHITE entries
+22:18 < mulander> but I'm running spamdb | grep -v WHITE just in case to be sure
+22:18 < mulander> if we do have a new line
+22:19 < mulander> we replace it with null terminating the string at that point
+22:19 < mulander> and set helo to the next character after the break
+22:19 < mulander> essentially splitting the string
+22:20 < mulander> we again check if the newly split entry has a newline
+22:21 < mulander> if not, we bail out to bad
+22:21 < mulander> which closes the db, and prints an error
+22:21 < mulander> we don't have that error so our entries don't hit this
+22:23 < mulander> we treat that as another splitting point and again set null
+22:24 < mulander> and move th string forward
+22:24 < mulander> looking again for a newline
+22:24 < mulander> if there's no newline
+22:24 < mulander> 230            if (to == NULL) {
+22:24 < mulander> 231                /* probably old format - print it the
+22:24 < mulander> 232                 * with an empty HELO field instead
+22:24 < mulander> 233                 * of erroring out.
+22:24 < mulander> 234                 */
+22:24 < mulander> we have no GREY entries so we are not going in here
+22:24 < mulander> ohterwise we again split, and grab the to email
+22:26 < mulander> and that's it
+22:26 < mulander> we free up and close the db
+22:26 < mulander> next we have usage and main
+22:26 < mulander> main is typical
+22:27 < mulander> getopt handling
+22:27 < mulander> opening up the db
+22:27 < mulander> pledging
+22:27 < mulander> for listing the db we pledge readonly
+22:28 < mulander> for others read and write
+22:28 < mulander> stdio in both cases
+22:28 < mulander> and that's it
+22:28 < mulander> for tomorrow we will look more into the db api used and what we can learn off the file
+22:28 < mulander> also noting
+22:29 < mulander> $ ls -alh /var/db/spamd  
+22:29 < mulander> -rw-r--r--  1 _spamd  _spamd   491M Jul 21  2015 /var/db/spamd
+22:29 < mulander> we will check if the size increases on our next read
+22:29 < mulander> keeping in mind that spamdb itself is not running
+22:30 < mulander> $ rcctl check spamd  
+22:30 < mulander> spamd(failed)
+22:30 < mulander> so if anything changes it's caused by the bgpd sync working
+22:30 < mulander> $ ls -al /var/db/spamd   
+22:30 < mulander> -rw-r--r--  1 _spamd  _spamd  515112960 Jul 21  2015 /var/db/spamd
+22:30 < mulander> final byte value, in case the change is small
+22:30 < mulander> --- DONE ---

@@ -1,0 +1,70 @@
+21:28 [Users #openbsd-daily]
+21:28 [@dlg           ] [ cengizIO       ] [ fdiskyou     ] [ kysse     ] [ philosaur ] [ tarug0       ] 
+21:28 [ [EaX]         ] [ corbyhaas      ] [ filwisher    ] [ landers2  ] [ phy1729   ] [ tdjones      ] 
+21:28 [ __gilles      ] [ corsah         ] [ flopper      ] [ lk23789k23] [ pstef     ] [ tdmackey_    ] 
+21:28 [ abecker       ] [ davl           ] [ FRIGN        ] [ lteo[m]   ] [ rain1     ] [ Technaton    ] 
+21:28 [ administ1aitor] [ debb75         ] [ fyuuri       ] [ lucias    ] [ rajak     ] [ thrym        ] 
+21:28 [ akfaew        ] [ desnudopenguino] [ g0relike     ] [ luisbg    ] [ Re[Box]   ] [ timclassic   ] 
+21:28 [ akkartik      ] [ Dhole          ] [ geetam       ] [ mandarg   ] [ rEv9      ] [ toddf        ] 
+21:28 [ antoon_i_     ] [ dial_up        ] [ ghostyy      ] [ martin__2 ] [ rgouveia  ] [ toorop       ] 
+21:28 [ antranigv     ] [ dmfr           ] [ ghugha       ] [ mattl     ] [ rnelson   ] [ TronDD       ] 
+21:28 [ apotheon      ] [ dostoyevsky    ] [ harrellc00per] [ metadave  ] [ rwrc_     ] [ TuxOtaku     ] 
+21:28 [ ar            ] [ dsp            ] [ Harry        ] [ mikeb     ] [ ryan      ] [ vbarros      ] 
+21:28 [ azend|vps     ] [ DuClare        ] [ holsta       ] [ mulander  ] [ S007      ] [ VoidWhisperer] 
+21:28 [ bcallah       ] [ dxtr           ] [ jbernard     ] [ Naabed-_  ] [ salva0    ] [ vyvup        ] 
+21:28 [ bcd           ] [ dzho           ] [ job          ] [ nacci     ] [ SETW      ] [ weezelding   ] 
+21:28 [ bch           ] [ eau            ] [ jsing        ] [ nacelle   ] [ shazaum   ] [ whyt         ] 
+21:28 [ biniar        ] [ ebag           ] [ jwit         ] [ nailyk    ] [ skizye    ] [ wilornel     ] 
+21:28 [ brianpc       ] [ emigrant       ] [ kAworu       ] [ nasuga    ] [ skrzyp    ] [ Yojimbo      ] 
+21:28 [ brianritchie  ] [ entelechy      ] [ kittens      ] [ Niamkik   ] [ smiles`   ] [ zelest       ] 
+21:28 [ brtln         ] [ epony          ] [ kl3          ] [ oldlaptop_] [ SpikeHeron] 
+21:28 [ bruflu        ] [ erethon        ] [ kpcyrd       ] [ owa       ] [ stateless ] 
+21:28 [ brynet        ] [ fcambus        ] [ kraucrow     ] [ petrus_lt ] [ t_b       ] 
+21:28 -!- Irssi: #openbsd-daily: Total of 123 nicks [1 ops, 0 halfops, 0 voices, 122 normal]
+21:29 < mulander> --- code read: /usr/bin/file more magic ---
+21:29 < mulander> *** continue where we dropped of at read 3 ***
+21:29 < mulander> code - http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#1359
+21:31 < mulander> man - https://man.openbsd.org/file
+21:31 < mulander> man - https://man.openbsd.org/magic.5
+21:32 < mulander> picking up wher we left
+21:32 < mulander> next up is the undocumented MAGIC_TYPE_USE
+21:32 < mulander> we know that from the libmagic manual which kl3 spotted
+21:32 < mulander>               use         Recursively call the named magic starting from the current offset.  If the name of the referenced begins with a ^ then the endianness of the magic is switched; if the magic mentioned leshort
+21:32 < mulander>                           for example, it is treated as beshort and vice versa.  This is useful to avoid duplicating the rules for different endianness.
+21:34 < mulander> 'If the name of the referenced begins with a ^ then the endianness of the magic is switched'
+21:34 < mulander> we can see a check for this on line 1364
+21:36 < mulander> bot reslt in a call to magic_get_named
+21:36 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_get_named
+21:36 < mulander> this finds a node in the magic_named_tree
+21:36 < mulander> that we saw is filled when the 'type name' is used
+21:36 < mulander> so use is a call site
+21:36 < mulander> whereas 'name' is the definition
+21:37 < mulander> if the name is unfound we bail with a warning
+21:38 < mulander> otherwise we call magic_test_children on the named node
+21:38 < mulander> if not we call magic_test_children
+21:38 < mulander> first call 1373 line
+21:38 < mulander> second 1376
+21:38 < mulander> the latter is always called
+21:38 < mulander> as it tests our current node children
+21:38 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_test_children
+21:39 < mulander> in the call sites
+21:39 < mulander>  magic_test_children(named, ms, offset, *ml->name == '^');
+21:39 < mulander>  magic_test_children(ml, ms, ms->start, ms->reverse);
+21:39 < mulander> the last parameter is int reverse
+21:43 < mulander> we then iterate over all children of the requested node
+21:43 < mulander> in the magic_test_children
+21:43 < mulander> setting the state reverse, start and offset to the values we got
+21:43 < mulander> and call magic_test_line
+21:43 < mulander> that we read yesterday
+21:43 < mulander> http://bxr.su/OpenBSD/usr.bin/file/magic-test.c#magic_test_line
+21:44 < mulander> for each node in the tailq
+21:44 < mulander> this lands us exactly on the spot we left off with
+21:45 < mulander> kl3: I think we just found another undocumented type
+21:45 < mulander> clear       This test is always true and clears the match flag for that continuation level.  It is intended to be used with the default test.
+21:46 < mulander> but this duplicates the documented 'default'
+21:46 < mulander> at least documentation wise
+21:47 < mulander> but roughly if we got that far, and our type is not CLEAR
+21:47 < mulander> we set ourselves as matched
+21:47 < mulander> and return if ml->result was set
+21:49 < mulander> I think this pretty much covers our read of file
+21:51 < mulander> --- DONE ---

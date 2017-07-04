@@ -1,0 +1,157 @@
+21:02 [Users #openbsd-daily]
+21:02 [@dlg         ] [ cengizIO       ] [ fcambus      ] [ kittens ] [ Niamkik   ] [ smiles`      ] 
+21:02 [ [EaX]       ] [ corbyhaas      ] [ fdiskyou     ] [ kl3     ] [ nopacienc3] [ stateless    ] 
+21:02 [ __gilles    ] [ corsah         ] [ filwisher    ] [ kpcyrd  ] [ oldlaptop_] [ t_b          ] 
+21:02 [ abecker     ] [ davl           ] [ flopper      ] [ kraucrow] [ owa       ] [ tarug0       ] 
+21:02 [ akfaew      ] [ desnudopenguino] [ FRIGN        ] [ kysse   ] [ petrus_lt ] [ tdmackey_    ] 
+21:02 [ akkartik    ] [ Dhole          ] [ g0relike     ] [ landers2] [ philosaur ] [ Technaton    ] 
+21:02 [ antoon_i_   ] [ dial_up        ] [ geetam       ] [ lteo[m] ] [ phy1729   ] [ thrym        ] 
+21:02 [ antranigv   ] [ dmfr           ] [ ghostyy      ] [ lucias  ] [ pstef     ] [ timclassic   ] 
+21:02 [ apotheon    ] [ dostoyevsky    ] [ ghugha       ] [ luisbg  ] [ qbit      ] [ toddf        ] 
+21:02 [ ar          ] [ dsp            ] [ Guest77833   ] [ mandarg ] [ rain1     ] [ toorop       ] 
+21:02 [ azend|vps   ] [ DuClare        ] [ harrellc00per] [ mattl   ] [ Re[Box]   ] [ TronDD       ] 
+21:02 [ bcallah     ] [ dunderproto    ] [ Harry        ] [ metadave] [ rEv9      ] [ TuxOtaku     ] 
+21:02 [ bcd         ] [ dxtr           ] [ holsta       ] [ mikeb   ] [ rgouveia  ] [ vbarros      ] 
+21:02 [ bch         ] [ dzho           ] [ jaypatelani  ] [ moch    ] [ rnelson   ] [ VoidWhisperer] 
+21:02 [ biniar      ] [ eau            ] [ jbernard     ] [ mulander] [ rwrc_     ] [ vyvup        ] 
+21:02 [ brianpc     ] [ ebag           ] [ jnu          ] [ Naabed-_] [ ryan      ] [ weezelding   ] 
+21:02 [ brianritchie] [ emigrant       ] [ job          ] [ nacci   ] [ S007      ] [ wilornel     ] 
+21:02 [ brtln       ] [ entelechy      ] [ jsing        ] [ nacelle ] [ salva0    ] [ Yojimbo      ] 
+21:02 [ bruflu      ] [ epony          ] [ jwit         ] [ nailyk  ] [ skizye    ] [ zelest       ] 
+21:02 [ brynet      ] [ erethon        ] [ kAworu       ] [ nasuga  ] [ skrzyp    ] 
+21:02 -!- Irssi: #openbsd-daily: Total of 119 nicks [1 ops, 0 halfops, 0 voices, 118 normal]
+21:02 < mulander> --- code read: spamd investigating spam db bloat ---
+21:02 < mulander> *** on our last read we took a look at our 491 MB size spam db file
+21:02 < mulander> *** the goal is to find out why it is growing so large ***
+21:03 < mulander> some handy pointers
+21:03 < mulander> man: https://man.openbsd.org/spamd the daemon
+21:03 < mulander> man: https://man.openbsd.org/spamdb utility for working with the spam database
+21:04 < mulander> man: https://man.openbsd.org/spamd-setup.8 configuration for the daemon
+21:04 < mulander> man: https://man.openbsd.org/spamd.conf.5 configuration file format
+21:04 < mulander> man: https://man.openbsd.org/spamlogd.8 - logging
+21:04 < mulander> http://bxr.su/OpenBSD/libexec/spamd/ - for the daemon
+21:04 < mulander> http://bxr.su/OpenBSD/libexec/spamd-setup/ - for the setup
+21:04 < mulander> http://bxr.su/OpenBSD/libexec/spamlogd/ - for logging
+21:04 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/
+21:05 < mulander> we are focusing on the last one for now
+21:05 < mulander> but might jump to others
+21:05 < mulander> we ended with
+21:05 < mulander> 22:29 < mulander> $ ls -alh /var/db/spamd  
+21:05 < mulander> 22:29 < mulander> -rw-r--r--  1 _spamd  _spamd   491M Jul 21  2015 /var/db/spamd
+21:05 < mulander> 22:30 < mulander> $ ls -al /var/db/spamd   
+21:05 < mulander> 22:30 < mulander> -rw-r--r--  1 _spamd  _spamd  515112960 Jul 21  2015 /var/db/spamd
+21:05 < mulander> 22:30 < mulander> final byte value, in case the change is small
+21:06 < mulander> let's see, if my spam db file grew since yesterday
+21:08 < mulander> $ ls -alh /var/db/spamd
+21:08 < mulander> -rw-r--r--  1 _spamd  _spamd   491M Jul 21  2015 /var/db/spamd
+21:08 < mulander> $ ls -al /var/db/spamd
+21:08 < mulander> -rw-r--r--  1 _spamd  _spamd  515112960 Jul 21  2015 /var/db/spamd
+21:08 < mulander> so no observable change in 24 hours
+21:09 < mulander> from running `file` on our db we know the format is Berkeley DB 1.85
+21:10 < mulander> let's find the code that works with this file
+21:14 < mulander> by looking up funcitons called on the db
+21:14 < mulander> we land on our manpage
+21:14 < mulander> https://man.openbsd.org/dbopen
+21:16 < mulander> in our casse the dbopen call is 
+21:16 < mulander> 304    db = dbopen(PATH_SPAMD_DB, O_EXLOCK | (action ? O_RDWR : O_RDONLY),
+21:16 < mulander> 305        0600, DB_HASH, &hashinfo);
+21:16 < mulander> so our format is DB_HASH
+21:16 < mulander> with additional documentation in : https://man.openbsd.org/hash.3
+21:22 < mulander> so we have a hashinfo structure
+21:22 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:22 < mulander> typedef struct { 
+21:22 < mulander> 	unsigned int bsize; 
+21:22 < mulander> 	unsigned int ffactor; 
+21:22 < mulander> 	unsigned int nelem; 
+21:22 < mulander> 	unsigned int cachesize; 
+21:22 < mulander> 	u_int32_t (*hash)(const void *, size_t); 
+21:22 < mulander> 	int lorder; 
+21:22 < mulander> } HASHINFO;
+21:22 < mulander> I'm tempted to write a small test utility
+21:22 < mulander> to check what values are set for our huge db
+21:23 < mulander> I stored a copy in /home/mulander/spamd.db 
+21:24 < mulander> for that let's follow what spamdb main does
+21:24 < mulander> http://bxr.su/OpenBSD/usr.sbin/spamdb/spamdb.c#273
+21:25 < mulander> the man pages tell us what we need to include
+21:25 < mulander> #include <sys/types.h> 
+21:25 < mulander> #include <db.h>
+21:26 < mulander> --
+21:26 < mulander> #include <sys/types.h> 
+21:26 < mulander> #include <fcntl.h> 
+21:26 < mulander> #include <limits.h> 
+21:26 < mulander> #include <db.h>
+21:27 < mulander> next the types we will work on
+21:27 < mulander> 276    HASHINFO    hashinfo;
+21:27 < mulander> 277    DB      *db;
+21:27 < mulander> we see hashinfo being zeroed out
+21:27 < mulander> memset(&hashinfo, 0, sizeof(hashinfo));
+21:28 < mulander> and memset means we also need to include string.h
+21:33 < mulander> now recreating our dbopen call
+21:33 < mulander> 304    db = dbopen(PATH_SPAMD_DB, O_EXLOCK | (action ? O_RDWR : O_RDONLY),
+21:33 < mulander> 305        0600, DB_HASH, &hashinfo);
+21:33 < mulander> we will open read only
+21:37 < mulander> we will now print all hashinfo members
+21:37 < mulander> after opening up the db
+21:37 < mulander> and close it with db->close(db)
+21:39 < mulander> we will skip printing out hash and lorder
+21:44 < mulander> looks like the struct is zeroed out or I am doing something wrong
+21:45 < mulander> I will try to iterate the keys instead
+21:46 < mulander> for that I will also define DBT     dbk, dbd;
+21:51 < mulander> ok now iterating over I can feel it going slow
+21:52 < mulander> 25 seconds per run
+21:52 < mulander> still no specific info in hashinfo that I can see
+21:52 -!- Irssi: Pasting 10 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:52 < mulander> $ time ./spamdb                                                                                                                                                                                                                                                                
+21:52 < mulander> bsize=0
+21:52 < mulander> ffactor=0
+21:52 < mulander> nelem=0
+21:52 < mulander> cachesize=0
+21:52 < mulander> bsize=0
+21:52 < mulander> ffactor=0
+21:52 < mulander> nelem=0
+21:52 < mulander> cachesize=0
+21:52 < mulander>     0m25.43s real     0m00.02s user     0m00.97s system
+21:53 < mulander> https://junk.tintagel.pl/spamdb-1.c for the first pass
+21:58 < mulander> trying now by printing each record in bytes
+21:58 < mulander> and seing how much the total takes
+21:58 < mulander> bytes=1079
+21:58 < mulander> is the total counted
+21:59 < mulander> and remembering that spamdb listed around 80 records
+21:59 < mulander> we can see this pretty much matching 13/14 bytes per record
+21:59 < mulander> which is what my debug output showed
+21:59 < mulander> bytes - 11
+21:59 < mulander> bytes - 14
+21:59 < mulander> bytes - 14
+21:59 < mulander> bytes - 14
+22:00 < mulander> https://junk.tintagel.pl/spamdb-2.c
+22:00 < DuClare> At the end of this we find that cranky old bdb is old and cranky?
+22:00 < mulander> DuClare: possibly, I am pretty much dumbfounded by this
+22:00 < mulander> theres 491 mb I can't account for
+22:01 < DuClare> Maybe it was larger at some point and bdb doesn't care enough to shrink it when entries are removed
+22:01 < mulander> but up to 500 megs?
+22:02 < mulander> I am actually thinking about using one of the db dump utilities floating around
+22:02 < mulander> to check what they can show
+22:05 < mulander> but for htat I'm moving the spamd.db to a different host
+22:05 < mulander> so this will take a while
+22:06 < mulander> i'm actually running strings against that db now
+22:06 < mulander> so far I only see ip addresses
+22:06 < mulander> strings /home/mulander/spamd.db
+22:06 < mulander> and | wc -l on the second terminal
+22:07 < mulander> will try a sort uniq before passing to wc -l after those 2 finish
+22:07 < mulander> so 100 entries in strings
+22:07 < mulander> just ip addresses
+22:08 < DuClare> What's the rest, nul?
+22:09 < mulander> $ strings /home/mulander/spamd.db | wc -l                                                                                             
+22:09 < mulander>      100
+22:09 < mulander> $ strings /home/mulander/spamd.db |sort | uniq | wc -l
+22:09 < mulander>       82
+22:10 < DuClare> I'd run hexdump -C file | less and skim it a bit
+22:11 < mulander> looks like a lot of 00 and ff
+22:12 < mulander> 1eb20000  02 00 02 08 00 00 f6 ff  00 00 ff ff ff ff ff ff  |................|
+22:12 < mulander> 1eb20010  ff ff ff ff ff ff ff ff  ff ff ff ff ff ff ff ff  |................|
+22:13 < mulander> 1c230000  02 00 02 08 00 00 f6 ff  00 00 ff ff ff ff ff ff  |................|
+22:13 < mulander> 1c230010  ff ff ff ff ff ff ff ff  ff ff ff ff ff ff ff ff  |................|
+22:13 < mulander> seems it's this pattern all over
+22:16 < mulander> let's call it quits for today
+22:17 < mulander> I need to think how to move forward, I don't like how large that file grows and I don't know when and why
+22:17 < mulander> --- DONE ---
