@@ -1,0 +1,162 @@
+22:26 [Users #openbsd-daily]
+22:26 [@dlg         ] [ brynet         ] [ fcambus      ] [ kl3     ] [ nnplv     ] [ smiles`      ] 
+22:26 [ [EaX]       ] [ cengizIO       ] [ fdiskyou     ] [ kpcyrd  ] [ nopacienc3] [ stateless    ] 
+22:26 [ __gilles    ] [ corbyhaas      ] [ filwisher    ] [ kraucrow] [ oldlaptop_] [ swankier     ] 
+22:26 [ abecker     ] [ corsah         ] [ fireglow     ] [ kysse   ] [ owa       ] [ t_b          ] 
+22:26 [ akfaew      ] [ desnudopenguino] [ flopper      ] [ kzisme  ] [ pdvyas    ] [ tarug0       ] 
+22:26 [ akkartik    ] [ Dhole          ] [ FRIGN        ] [ landers2] [ petrus_lt ] [ tdmackey_    ] 
+22:26 [ antoon_i_   ] [ dial_up        ] [ g0relike     ] [ lteo[m] ] [ philosaur ] [ Technaton    ] 
+22:26 [ antranigv   ] [ dmfr           ] [ geetam       ] [ lucias  ] [ phy1729   ] [ thrym        ] 
+22:26 [ apelsin     ] [ dostoyevsky    ] [ ghostyyy     ] [ mandarg ] [ pstef     ] [ timclassic   ] 
+22:26 [ apotheon    ] [ dsp            ] [ ghugha       ] [ mattl   ] [ qbit      ] [ toddf        ] 
+22:26 [ ar          ] [ DuClare        ] [ Guest77833   ] [ metadave] [ rain1     ] [ toorop       ] 
+22:26 [ azend|vps   ] [ duncaen        ] [ harrellc00per] [ mikeb   ] [ Re[Box]   ] [ TronDD       ] 
+22:26 [ bcallah     ] [ dunderproto    ] [ Harry_       ] [ moch    ] [ rEv9      ] [ turlando     ] 
+22:26 [ bcd         ] [ dxtr           ] [ holsta       ] [ mulander] [ rgouveia  ] [ TuxOtaku     ] 
+22:26 [ bch         ] [ dzho           ] [ ija          ] [ Naabed-_] [ rnelson   ] [ vbarros      ] 
+22:26 [ biniar      ] [ eau            ] [ jbernard     ] [ nacci   ] [ rwrc_     ] [ VoidWhisperer] 
+22:26 [ BlackFrog   ] [ ebag           ] [ job          ] [ nacelle ] [ ryan      ] [ vyvup        ] 
+22:26 [ brianpc     ] [ emigrant       ] [ jsing        ] [ nailyk  ] [ S007      ] [ weezelding   ] 
+22:26 [ brianritchie] [ entelechy      ] [ jwit         ] [ nand1   ] [ salva0    ] [ wilornel     ] 
+22:26 [ brtln       ] [ epony          ] [ kAworu       ] [ nasuga  ] [ SETW      ] [ xcko_        ] 
+22:26 [ bruflu      ] [ erethon        ] [ kittens      ] [ Niamkik ] [ skrzyp    ] [ zelest       ] 
+22:26 -!- Irssi: #openbsd-daily: Total of 126 nicks [1 ops, 0 halfops, 0 voices, 125 normal]
+22:27 < mulander> --- code read: battling spamdb ---
+22:27 < mulander> *** goal: spamdb database bloat ***
+22:27 < mulander> yesterday we wrote a piece of code to test re-creating the 491M DB by reading it's values in sequence and writing it one by one to a newly created db
+22:27 < mulander> I left the code running all night, and this morning with help from DuClare we found out it was actually stuck in an infinite loop
+22:28 < mulander> to our surprise the loop was from dbopen
+22:32 -!- Irssi: Pasting 5 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:32 < mulander> 13:03 < mulander> (gdb) bt
+22:32 < mulander> 13:03 < mulander> #0  0x000011df7379da20 in __log2 (num=2595638206) at /usr/src/lib/libc/db/hash/hash_log2.c:46
+22:32 < mulander> 13:03 < mulander> #1  0x000011df7378bcd2 in __hash_open (file=0x11dca0f00d23 "/home/mulander/nspamd.db", flags=66082, mode=384, info=0x7f7ffffc0010, dflags=Variable "dflags" is not available.
+22:32 < mulander> 13:03 < mulander> ) at /usr/src/lib/libc/db/hash/hash.c:295
+22:32 < mulander> 13:03 < mulander> #2  0x000011dca0e00658 in main () from /home/mulander/openbsd-daily/spamdb-3
+22:32 -!- Irssi: Pasting 14 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:32 < mulander> 12:49 < mulander> [Switching to thread 381893]
+22:32 < mulander> 12:49 < mulander> 0x000011df7379da20 in __log2 (num=2595638206) at /usr/src/lib/libc/db/hash/hash_log2.c:46
+22:32 < mulander> 12:49 < mulander> 46              for (i = 0; limit < num; limit = limit << 1, i++);
+22:32 < mulander> 12:51 < DuClare> What did the program print for nelem?
+22:32 < mulander> 12:55 < DuClare> But yeah that looks like an infinite loop :)
+22:32 < mulander> 12:55 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:32 < mulander> 12:55 < mulander> (gdb) p i
+22:32 < mulander> 12:55 < mulander> $3 = 523610748
+22:32 < mulander> 12:55 < mulander> (gdb) p num
+22:32 < mulander> 12:55 < mulander> $4 = 2595638206
+22:32 < mulander> 12:55 < mulander> (gdb) p limit
+22:32 < mulander> 12:55 < mulander> $5 = 0
+22:32 < mulander> 12:55 < mulander> (gdb) 
+22:32 < mulander> 12:56 < DuClare> Obviously, num > 2^31 and shifting limit above 2^31 wraps
+22:34 < mulander> now, the reason we hit this was an error in my code
+22:34 < mulander> and sheer luck
+22:35 < mulander> in https://junk.tintagel.pl/spamdb-3.c
+22:35 < mulander> I added a nhashinfo for the new db
+22:36 < mulander> but I did not add memset to zero it out like the original hashinfo is handled
+22:36 < mulander> memset(&hashinfo, 0, sizeof(hashinfo));
+22:36 < mulander> this meant that the structure was initially junk
+22:36 < mulander> the values were sane enough for it to not bail out with an error
+22:36 < mulander> as my further attempts to reproduce this without calling memset resulted in
+22:36 < mulander> $ ./spamdb-open 
+22:36 < mulander> spamdb-open: cannot open db for writing: Invalid argument
+22:37 < mulander> so I was *un*lucky that this didn't hit when I started the code yesterday
+22:37 < mulander> however one value was large enough to trigger the infinite loop
+22:38 < DuClare> Heh
+22:38  * mulander waves hands like a jedi
+22:38 < mulander> this is not the bug we were looking for
+22:39 < mulander> but while here I checked what NetBSD did, and they fixed possibly this exact bug
+22:39 < mulander> http://cvsweb.netbsd.org/bsdweb.cgi/src/lib/libc/db/hash/hash_log2.c.diff?r1=1.11&r2=1.12&f=h
+22:39 < mulander> http://cvsweb.netbsd.org/bsdweb.cgi/src/lib/libc/db/hash/hash_log2.c
+22:39 < mulander> in commit 1.12
+22:39 < mulander> with the message:
+22:39 < mulander> "Fix __log2 to not loop for 0x80000000 and higher.
+22:40 < mulander> and the option that impacts the value passed to __log2 is the bsize from hashinfo
+22:40 < mulander>            bsize   bsize defines the hash table bucket size, and is, by
+22:40 < mulander>                    default, the block size of the underlying filesystem.  It
+22:40 < mulander>                    may be preferable to increase the page size for disk-
+22:40 < mulander>                    resident tables and tables with large data items.
+22:41 < mulander> I'm not sure if porting the fix to OpenBSD is worth it
+22:41 < mulander> if I'm not wrong it would require someone defining >2 GB block size
+22:41 < mulander> seems like an extreme edge case
+22:42 < mulander> but putting it out there if someone wants to evaluate pros & cons
+22:42 < mulander> back to our code
+22:42 < mulander> obviously I added the memset and re-run the code
+22:43 < mulander> $ ls -alh /home/mulander/*spamd.db                                                                                                                                                                                                
+22:43 < mulander> -rw-------  1 mulander  mulander  64.0K Jul  3 13:14 /home/mulander/nspamd.db
+22:43 < mulander> -rw-r--r--  1 mulander  mulander   491M Jun 30 21:46 /home/mulander/spamd.db
+22:43 < mulander> so we have a significantly smaller db
+22:44 < mulander> that makes me wonder why the old one is so big
+22:44 < mulander> some possibilities include a junked blok size, larger than usual blocksize and unreclaimed space from expired entries
+22:45 < DuClare> Throw a loop to add a million random entries, then remove them?
+22:45 < mulander> nice idea
+22:55 < mulander> DuClare: think there would be a difference between add/remove in single loop vs add loop / remove loop ?
+22:56 < DuClare> Hard to say
+22:56 < mulander> will do the latter then
+23:04 < mulander> I'm going to re-use the dbdata but will generate new keys
+23:06 < pstef> If it thinks in pages then of the two guesses I'd prefer the former.
+23:07 < mulander> we can do both
+23:07 < mulander> not much work changing one to the other
+23:07 < mulander> also
+23:07 < mulander> I should probably sync between those?
+23:07 < mulander> to force it writing out to disk
+23:07 < mulander> before deleting
+23:10 < mulander> running first pass
+23:11 < mulander> we have a 96k file now
+23:11 < mulander> $ ls -alh ~/*spamd*.db
+23:11 < mulander> -rw-------  1 mulander  mulander  96.0K Jul  3 23:10 /home/mulander/nspamd.db
+23:11 < mulander> -rw-------  1 mulander  mulander     0B Jul  3 13:10 /home/mulander/spamd-open.db
+23:11 < mulander> -rw-r--r--  1 mulander  mulander   491M Jun 30 21:46 /home/mulander/spamd.db
+23:11 < mulander> https://junk.tintagel.pl/spamdb-5.c for the code that produced it
+23:13 < mulander> don't see the same pattern with hexdump -C
+23:13 -!- Irssi: Pasting 5 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+23:13 < mulander> 00190000  00 00 fa ff 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+23:13 < mulander> 00190010  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+23:13 < mulander> *
+23:13 < mulander> 001a0000  02 00 02 08 00 00 f6 ff  00 00 ff ff ff ff ff ff  |................|
+23:13 < mulander> 001a0010  ff ff ff ff ff ff ff ff  ff ff ff ff ff ff ff ff  |................|
+23:13 < mulander> in the original db
+23:13 < mulander> for filler space
+23:14 < mulander> hmm new one seems to have all the ascii keys
+23:14 < mulander> did I fail to delete?
+23:16 < mulander> or perhaps deleting doesn't impact the db size
+23:17 < mulander> let's lok
+23:17 < mulander> http://bxr.su/OpenBSD/lib/libc/db/hash/hash.c#537
+23:17 < mulander> I assume this handles our delete
+23:18 < mulander> initial checks
+23:18 < mulander> for read only or non existing key
+23:18 < mulander> then calling hash_access
+23:18 < mulander> with HASH_DELETE
+23:18 < mulander> http://bxr.su/OpenBSD/lib/libc/db/hash/hash.c#558
+23:19 < mulander> results in a call to __delpair
+23:19 < mulander> http://bxr.su/OpenBSD/lib/libc/db/hash/hash_page.c#118
+23:21 < mulander> and big delete
+23:21 < mulander> http://bxr.su/OpenBSD/lib/libc/db/hash/hash_bigkey.c#191
+23:21 < mulander> so I'm just glancing over it
+23:21 < mulander> but this makes me think it doesn't remove a page of storage unless all keys are gone from it
+23:22 < mulander> let's try  what pstef  suggested , doing the alloc delete in a single run
+23:24 < mulander> running
+23:25 < mulander> $ ls -alh /home/mulander/*spamd.db                                                                                                                                                                                                
+23:25 < mulander> -rw-------  1 mulander  mulander  96.0K Jul  3 23:24 /home/mulander/5spamd.db
+23:25 < mulander> -rw-------  1 mulander  mulander  64.0K Jul  3 23:25 /home/mulander/nspamd.db
+23:25 < mulander> -rw-r--r--  1 mulander  mulander   491M Jun 30 21:46 /home/mulander/spamd.db
+23:25 < mulander> 5spamd.db is our previous run
+23:25 < mulander> of make 1k records, sync, delete 1k records.
+23:26 < mulander> nspamd.db here is run 1k times adding and removing the same record.
+23:26 < mulander> it looks like the one where we didn't add any
+23:26 < mulander> (so baseline 64k)
+23:26 < mulander> will add by adding sync between put/delete just in case
+23:27 < mulander> running
+23:28 < mulander> $ ls -alh /home/mulander/*spamd.db  
+23:28 < mulander> -rw-------  1 mulander  mulander  96.0K Jul  3 23:24 /home/mulander/5spamd.db
+23:28 < mulander> -rw-------  1 mulander  mulander  64.0K Jul  3 23:27 /home/mulander/nspamd.db
+23:28 < mulander> -rw-r--r--  1 mulander  mulander   491M Jun 30 21:46 /home/mulander/spamd.db
+23:28 < mulander> no change
+23:28 < mulander> I'm also re-running the same code a few times now
+23:29 < mulander> withou removing the db in between
+23:29 < mulander> no change
+23:30 < mulander> so this would explain why the db doesn't grow down to normal size
+23:30 < mulander> if the entries are sparse
+23:31 < mulander> and pages containing mostly expired ones still have a single one there preventing it from being reclaimd
+23:31 < mulander> my goal for tomorrow
+23:31 < mulander> is checking what page size spamdb uses
+23:31 < mulander> and starting up spamdb with my huge db to see what it does with it
+23:31 < mulander> --- DONE ---

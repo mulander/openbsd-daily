@@ -1,0 +1,106 @@
+20:54 [Users #openbsd-daily]
+20:54 [@dlg         ] [ corbyhaas      ] [ fireglow     ] [ kysse     ] [ petrus_lt] [ tdmackey_    ] 
+20:54 [ __gilles    ] [ corsah         ] [ flopper      ] [ landers2  ] [ philosaur] [ Technaton    ] 
+20:54 [ akfaew      ] [ desnudopenguino] [ FRIGN        ] [ lteo[m]   ] [ phy1729  ] [ thrym        ] 
+20:54 [ akkartik    ] [ Dhole          ] [ fyuuri       ] [ lucias    ] [ pstef    ] [ timclassic   ] 
+20:54 [ antoon_i_   ] [ dial_up        ] [ geetam       ] [ mandarg   ] [ qbit     ] [ toddf        ] 
+20:54 [ antranigv   ] [ dmfr           ] [ ghostyyy     ] [ mattl     ] [ raf1     ] [ toorop       ] 
+20:54 [ apelsin     ] [ dostoyevsky    ] [ ghugha       ] [ metadave  ] [ rain1    ] [ TronDD       ] 
+20:54 [ apotheon    ] [ DuClare        ] [ Guest77833   ] [ mikeb     ] [ Re[Box]  ] [ turlando     ] 
+20:54 [ ar          ] [ duncaen        ] [ harrellc00per] [ moch      ] [ rEv9     ] [ TuxOtaku     ] 
+20:54 [ azend|vps   ] [ dunderproto    ] [ Harry_       ] [ mulander  ] [ rgouveia ] [ vbarros      ] 
+20:54 [ bcallah     ] [ dxtr           ] [ holsta       ] [ Naabed-_  ] [ rnelson  ] [ VoidWhisperer] 
+20:54 [ bcd         ] [ dzho           ] [ ija          ] [ nacci     ] [ rwrc_    ] [ vyvup        ] 
+20:54 [ bch         ] [ eau            ] [ jbernard     ] [ nacelle   ] [ ryan     ] [ weezelding   ] 
+20:54 [ biniar      ] [ ebag           ] [ job          ] [ nailyk    ] [ S007     ] [ wilornel     ] 
+20:54 [ BlackFrog   ] [ emigrant       ] [ jsing        ] [ nand1     ] [ salva0   ] [ xcko         ] 
+20:54 [ brianpc     ] [ entelechy      ] [ jwit         ] [ Niamkik   ] [ skrzyp   ] [ xor29ah      ] 
+20:54 [ brianritchie] [ epony          ] [ kAworu       ] [ nnplv     ] [ smiles`  ] [ zelest       ] 
+20:54 [ brtln       ] [ erethon        ] [ kittens      ] [ nopacienc3] [ stateless] 
+20:54 [ bruflu_     ] [ fcambus        ] [ kl3          ] [ oldlaptop_] [ sthen_   ] 
+20:54 [ brynet      ] [ fdiskyou       ] [ kpcyrd       ] [ owa       ] [ t_b      ] 
+20:54 [ cengizIO    ] [ filwisher      ] [ kraucrow     ] [ pdvyas    ] [ tarug0   ] 
+20:54 -!- Irssi: #openbsd-daily: Total of 122 nicks [1 ops, 0 halfops, 0 voices, 121 normal]
+21:04 < mulander> --- code read: spamdb hunting the big whitelist ---
+21:05 < mulander> *** goal: find out why my spamdb bloated up ***
+21:08 < mulander> 23:31 < mulander> my goal for tomorrow
+21:08 < mulander> 23:31 < mulander> is checking what page size spamdb uses
+21:08 < mulander> 23:31 < mulander> and starting up spamdb with my huge db to see what it does with it
+21:08 < mulander> so we are leaving poking around the huge db, to see some actual spamd code
+21:10 < mulander> man: https://man.openbsd.org/spamd the daemon
+21:10 < mulander> let's start with that one
+21:10 < mulander> as I think this is the place most likely to operate on the db
+21:11 < mulander> http://bxr.su/OpenBSD/libexec/spamd/ - for the daemon
+21:11 < mulander> we have a bunch of files here
+21:11 < mulander> let's try to identify what each does
+21:12 < mulander> Makefile is obviously for building the code
+21:12 < mulander> we saw gdcopy.c before
+21:12 < mulander> it is used to migrate an old spamdb format
+21:12 < mulander> I decipher that as 'grey data copy in'
+21:12 < mulander> grey.[ch] - I assume grey list handling
+21:13 < mulander> most likely our area of interest as my spamd worked in greylisting mode in front of a real mail server
+21:14 < mulander> sdl doesn't seem to stand for simple directmedia layer, instead it seems to handle source lists, so I assume known senders
+21:14 < mulander> spamd.c should be the main program
+21:14 < mulander> and .8 is the man page
+21:22 < mulander> and sync.[ch]
+21:22 < mulander> * This protocol has been designed for realtime synchronisation between
+21:22 < mulander> 26 * multiple machines running spamd(8)
+21:22 < mulander> so we can saaafely ignore sync as I don't use that
+21:22 < mulander> my first bets are either spamd.c or grey.c
+21:22 < mulander> let's start with spamd.c
+21:24 < mulander> http://bxr.su/OpenBSD/libexec/spamd/spamd.c
+21:24 < mulander> standard bunch of includes
+21:24 < mulander> could use sorting
+21:25 < mulander> we have a con struct defined
+21:25 < mulander> possibly representng an established connection
+21:25 < mulander> some defines for TLS state
+21:25 < mulander> a defined SPAMD_USER
+21:25 < mulander> I assume this is for privdrop
+21:25 < mulander> down to _spamd
+21:26 < mulander> forward declarations next
+21:26 < mulander> usage, config parsing, logging, connection handling, nextstate - state machine like api?
+21:26 < mulander> tls handling
+21:26 < mulander> checking the db
+21:26 < mulander> just guessing from names
+21:26 < mulander> moving on
+21:26 < mulander> bunch of global defines
+21:29 < mulander> next actual functions
+21:30 < mulander> skipping ones I don't think are relevant
+21:33 < mulander> so I cheated
+21:33 < mulander> and searched for dbopen
+21:33 < mulander> and no hit in this file
+21:34 < mulander> so I jumped over to grey.c
+21:34 < mulander> http://bxr.su/OpenBSD/libexec/spamd/grey.c
+21:34 < mulander> which has 5 hits for db open
+21:38 < mulander> first hit in greyscan
+21:38 < mulander> http://bxr.su/OpenBSD/libexec/spamd/grey.c#518
+21:38 < mulander> nothing special passed to hashinfo
+21:42 < mulander> in all 5 occurrences hashinfo is memset to 0
+21:42 < mulander> before calling dbopen
+21:42 < mulander> that kills my suspiction that hashinfo could have been corrupted before opening the db
+21:43 < mulander> let's go over those occurrences for today
+21:43 < mulander> and what each method opening the db does
+21:44 < mulander> first the linked greyscan above
+21:44 < mulander> we open the db
+21:44 < mulander> clear up key and data fields
+21:44 < mulander> and loop over all keys of the db
+21:44 < mulander> (we saw that loop in spamdb earlier)
+21:44 < mulander> we handle migrating the data
+21:44 < mulander> and bail out if it's unkown and non migratable
+21:50 < mulander> when iterating
+21:50 < mulander> w drop expired entries
+21:50 < mulander> by callng queue_change with DBC_DEL
+21:51 < mulander> it builts a list of changes that need to be serialized to the storage
+21:51 < mulander> for DBC_DEL eventually db->del (that we know) is called from do_changes
+21:51 < mulander> http://bxr.su/s?refs=do_changes&project=OpenBSD
+21:52 < mulander> and if the caller responded when expected
+21:52 < mulander> we promote him to a white list
+21:52 < mulander> 556            /*
+21:52 < mulander> 557             * if not already TRAPPED,
+21:52 < mulander> 558             * add address to whitelist
+21:52 < mulander> 559             * add an address-keyed entry to db
+21:52 < mulander> 560             */
+21:53 < mulander> this results in DBC_ADD being queued
+21:53 < mulander> and resulting in a db->put and a sync to disk
+22:01 < mulander> on second thought let's pause here today, have to think if we want to go deep on each spot or breath first
+22:01 < mulander> --- DONE ---

@@ -1,0 +1,182 @@
+00:02 [Users #openbsd-daily]
+00:02 [@dlg         ] [ corsah         ] [ fireglow     ] [ lucias    ] [ philosaur] [ tarug0       ] 
+00:02 [ __gilles    ] [ desnudopenguino] [ flopper      ] [ mandarg   ] [ phy1729  ] [ tdmackey_    ] 
+00:02 [ akfaew      ] [ Dhole          ] [ g0relike     ] [ mattl     ] [ polishdub] [ Technaton    ] 
+00:02 [ akkartik    ] [ dial_up        ] [ geetam       ] [ metadave  ] [ pstef    ] [ thrym        ] 
+00:02 [ antoon_i_   ] [ dmfr           ] [ ghostyyy     ] [ mikeb     ] [ qbit     ] [ timclassic   ] 
+00:02 [ antranigv   ] [ dostoyevsky    ] [ harrellc00per] [ moch      ] [ raf1     ] [ toddf        ] 
+00:02 [ apelsin     ] [ DuClare        ] [ holsta       ] [ mulander  ] [ rain1    ] [ toorop       ] 
+00:02 [ apotheon    ] [ duncaen        ] [ ija          ] [ Naabed-_  ] [ rajak    ] [ TronDD       ] 
+00:02 [ azend|vps   ] [ dunderproto    ] [ jbernard     ] [ nacci     ] [ Re[Box]  ] [ TronDD-w     ] 
+00:02 [ bcallah     ] [ dxtr           ] [ job          ] [ nacelle   ] [ rEv9     ] [ turlando     ] 
+00:02 [ bcd         ] [ dzho           ] [ jsing        ] [ nailyk    ] [ rgouveia ] [ TuxOtaku     ] 
+00:02 [ bch         ] [ eau            ] [ jwit         ] [ nand1     ] [ rnelson  ] [ vbarros      ] 
+00:02 [ biniar      ] [ ebag           ] [ kAworu       ] [ nasuga    ] [ rwrc_    ] [ VoidWhisperer] 
+00:02 [ brianpc     ] [ emigrant       ] [ kittens      ] [ Niamkik   ] [ ryan     ] [ vyvup        ] 
+00:02 [ brianritchie] [ entelechy      ] [ kl3          ] [ nnplv     ] [ S007     ] [ weezelding   ] 
+00:02 [ brtln       ] [ epony          ] [ kpcyrd       ] [ nopacienc3] [ salva0   ] [ wilornel     ] 
+00:02 [ bruflu      ] [ erethon        ] [ kraucrow     ] [ oldlaptop_] [ skrzyp   ] [ xor29ah      ] 
+00:02 [ brynet      ] [ fcambus        ] [ kysse        ] [ owa       ] [ smiles`  ] [ zelest       ] 
+00:02 [ cengizIO    ] [ fdiskyou       ] [ landers2     ] [ pdvyas    ] [ stateless] 
+00:02 [ corbyhaas   ] [ filwisher      ] [ lteo[m]      ] [ petrus_lt ] [ t_b      ] 
+00:02 -!- Irssi: #openbsd-daily: Total of 118 nicks [1 ops, 0 halfops, 0 voices, 117 normal]
+00:02 < mulander> --- code read: w/uptime ---
+00:02 < mulander> *** goal: overall read of the utility ***
+00:02 < mulander> to have a small break from spamd we will jump off to a smaller utility
+00:03 < mulander> code - http://bxr.su/OpenBSD/usr.bin/w/
+00:03 < mulander> man: https://man.openbsd.org/w
+00:03 < mulander> man: https://man.openbsd.org/uptime
+00:03 < mulander> as always let's do a quick calssification of each file
+00:04 < mulander> extern.h - external defines
+00:05 < mulander> Makefile - a trivial build script, note that it installs the code as 2 binaries - /usr/bin/w and /usr/bin/uptme
+00:05 < mulander> pr_time.c - code to handle displaying time intervals
+00:06 < mulander> proc_compare.c - pic a process to display when running as w
+00:07 < mulander> uptime.1 and w.1 - man pags
+00:07 < mulander> w.c - the main program
+00:07 < mulander> let's jump into w.c
+00:07 < mulander> http://bxr.su/OpenBSD/usr.bin/w/w.c
+00:09 < mulander> a lot of includes for a seemingly simple utility
+00:09 < mulander> global args and structs for display layout, and boot time handling
+00:10 < mulander> we see a reference to utmp showing up
+00:10 < mulander> https://man.openbsd.org/utmp let's keep it's manpage open
+00:10 < mulander> The <utmp.h> file declares the structures used to record information about current users in the utmp file, logins and logouts in the wtmp file, and last logins in the lastlog file. The timestamps of date changes, shutdowns, and reboots are also logged in the wtmp file.
+00:11 < mulander> bunch of forward declares and we hit main
+00:11 < mulander> -  /* Are we w(1) or uptime(1)? */
+00:12 < mulander> both w and uptime are implmeented as a single code base
+00:12 < mulander> that behaves differently based on the name of the binary
+00:12 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+00:12 < mulander> $ cp `which uptime` w
+00:12 < mulander> $ ./w
+00:12 < mulander> 12:12AM  up 11 days, 11:43, 2 users, load averages: 2.46, 2.67, 2.70
+00:12 < mulander> USER    TTY FROM              LOGIN@  IDLE WHAT
+00:12 < mulander> mulander pc 46.148.157.96    Thu08PM     6 -ksh 
+00:12 < mulander> mulander pf 46.148.157.96    Mon01PM     0 tmux: client (/tmp/tmux-1000/default) 
+00:12 < mulander> $ cp w ./uptime
+00:12 < mulander> $ ./uptime                                                                                                                                                                                      
+00:12 < mulander> 12:12AM  up 11 days, 11:43, 2 users, load averages: 2.54, 2.68, 2.71
+00:14 < mulander> the interesting part here
+00:14 < mulander> is char *p handling
+00:15 < mulander> which depending on the name defines the valid options for getopt
+00:16 < mulander> we also set a flag `wcmd` to which we can refer later to know what we are
+00:16 < mulander> and there's also a catchall for people renaming us to random names
+00:16 < mulander> $ cp uptime hello                                                                                                                                                                               
+00:16 < mulander> $ ./hello                                                                                                                                                                                       
+00:16 < mulander> hello: this program should be invoked only as "w" or "uptime"
+00:18 < mulander> next we see standard getopt handling
+00:19 < mulander> with an interesting
+00:19 < mulander> 150        case 'f': case 'l': case 's': case 'u': case 'w':
+00:19 < mulander> 151            warnx("[-flsuw] no longer supported");
+00:19 < mulander> 152            /* FALLTHROUGH */
+00:20 < mulander> I like to check such htings
+00:21 < mulander> 22 years ago, from the initial import of the NetBSD tree
+00:21 < mulander> $ w -f
+00:21 < mulander> w: [-flsuw] no longer supported
+00:21 < mulander> usage: w [-ahi] [-M core] [-N system] [user]
+00:21 < mulander> wonder if 22 years of warnings is enough to kill that
+00:23 < mulander> next we pledge
+00:23 < mulander> the nflag is -a
+00:23 < mulander>  -a      Attempt to translate network addresses into names.
+00:24 < mulander> and that's why that one needs dns
+00:24 < mulander> I expected a difference between 'w' and 'uptime' pledge
+00:24 < mulander> perhaps they do share a lot of the same requirements
+00:27 < mulander> next we see kvm calls for cases where a coredump or a different system via /dev/mem
+00:28 < mulander> we then open up /var/run/utmp
+00:28 < mulander> which is a binary file, 11.3K on my system
+00:30 < mulander> for (nusers = 0; fread(&utmp, sizeof(utmp), 1, ut);) {
+00:30 < mulander> set nusers to zero, on each step we don't increment any countrs
+00:30 < mulander> and our loop condition is
+00:30 < mulander> fread(&utmp, sizeof(utmp), 1, ut)
+00:31 < mulander> which reads one utmp struct from the utmp file into utmp
+00:31 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+00:31 < mulander> 85/*
+00:31 < mulander> 86 * One of these per active utmp entry.
+00:31 < mulander> 87 */
+00:31 < mulander> 88struct  entry {
+00:31 < mulander> 89    struct  entry *next;
+00:31 < mulander> 90    struct  utmp utmp;
+00:31 < mulander> 91    dev_t   tdev;           /* dev_t of terminal */
+00:31 < mulander> 92    time_t  idle;           /* idle time of terminal in seconds */
+00:31 < mulander> 93    struct  kinfo_proc *kp;     /* `most interesting' proc */
+00:32 < mulander> 94} *ep, *ehead = NULL, **nextp = &ehead;
+00:34 < mulander> we skip records with no name
+00:35 < mulander> if we are running as `w` or the selected user was provided and the ut_name doesnt match the selected user we skip
+00:35 < mulander> that or between wcmd and the second check is weird.
+00:36 < mulander> as uptime takes no parameters
+00:37 < mulander> ah, it skips the record completely for wcmd
+00:37 < mulander> when not wcmd that is
+00:37 < mulander> and for wcmd if sel_user was provided - so that's fine
+00:40 < mulander> next we call ttystat on the users tty
+00:40 < mulander> http://bxr.su/OpenBSD/usr.bin/w/w.c#ttystat
+00:42 < mulander> the '/dev/' is prependd to the tty name
+00:42 < mulander> then stat is called and we return the stat result
+00:42 < mulander> 200        /*
+00:42 < mulander> 201         * If this is the console device, attempt to ascertain
+00:42 < mulander> 202         * the true console device dev_t.
+00:42 < mulander> 203         */
+00:42 < mulander> is achieved using a sysctl
+00:43 < mulander>  
+00:43 < mulander> KERN_CONSDEV (kern.consdev)
+00:43 < mulander> The console device.
+00:43 < mulander> https://man.openbsd.org/sysctl.3
+00:43 < mulander> we repeat that for each utmp entry then close the file
+00:44 < mulander> next we call pr_header 
+00:45 < mulander> if we are not wcmd, we will exit at this point (After printing the header)
+00:45 < mulander> if we are wcmd and header is still defined (ie. -h was not passed)
+00:45 < mulander> we continue
+00:45 < mulander> let's jump to the header code
+00:45 < mulander> http://bxr.su/OpenBSD/usr.bin/w/w.c#pr_header
+00:46 < mulander> we print the time of day, then our uptime obtained from a sysctl
+00:46 < mulander>  
+00:46 < mulander> KERN_BOOTTIME (kern.boottime)
+00:46 < mulander> A struct timeval structure is returned. This structure contains the time that the system was booted.
+00:47 < mulander> we convert it to a human readable string
+00:47 < mulander> like up n days hours:minutes
+00:47 < mulander> after that we print the amount of users logged in
+00:47 < mulander> and load averages
+00:48 < mulander> obtained from https://man.openbsd.org/getloadavg.3
+00:48 < mulander> the resulting line is 12:46AM  up 11 days, 12:17, 2 users, load averages: 2.38, 2.68, 2.72
+00:48 < mulander> that we know is shared both by uptime and w
+00:49 < mulander> http://bxr.su/OpenBSD/usr.bin/w/w.c#225 - back here
+00:50 < mulander> here we are only w
+00:50 < mulander> we spit out our header
+00:50 < mulander> we obtain the process states from kvm https://man.openbsd.org/kvm_getprocs.3
+00:51 < mulander> we call ioctl TIOCGWINSZ
+00:52 < mulander>  
+00:52 < mulander> TIOCGWINSZ struct winsize *ws
+00:52 < mulander> Put the window size information associated with the terminal in the winsize structure pointed to by ws. The window size structure contains the number of rows and columns (and pixels if appropriate) of the devices attached to the terminal. It is set by user software and is the means by which most full-screen oriented programs determine the screen size.
+00:52 < mulander> https://man.openbsd.org/tty.4
+00:52 < mulander> on stdout, err and in
+00:52 < mulander> then some sanity checks for min allowed sizes
+00:53 < mulander> next iterate over all the processes we got
+00:53 < mulander> 247            /* ftp is a special case. */
+00:53 < mulander> 248            if (strncmp(ep->utmp.ut_line, "ftp", 3) == 0) {
+00:53 < mulander> huh, wonder why?
+00:53 < mulander> because it can contain user and password in the args?
+00:54 < mulander> a look over the fence reveals some more context
+00:54 < mulander> http://bxr.su/NetBSD/usr.bin/w/w.c#558
+00:55 < mulander> I wonder if this code is needed at all, it was there 21 years ago
+00:56 < mulander> adding it to 'things to check'
+00:56 < mulander> next we call proc compare between the previous and current process
+00:56 < mulander> essentially deciding if this one is more interesting than the one we saw before
+00:57 < mulander> so we will end up with a single 'most interesting process kept as ep
+00:58 < mulander> so the entries we built is a linked list, we now sort it by idle time
+00:59 < mulander> next if -A was passed
+00:59 < mulander> we do dns resolution
+01:00 < mulander> next we iterate our entries
+01:00 < mulander> printing each one out
+01:00 < mulander> and that covers main
+01:01 < mulander> we have some formating helper functions next
+01:01 < mulander> fmt_puts - accounting for the available screen estate
+01:01 < mulander> pr_args for printing command line arguments
+01:01 < mulander> hah, again special treatement for ftpd
+01:02 < mulander> 400        /*
+01:02 < mulander> 401         * ftp argv[0] is in the following format:
+01:02 < mulander> 402         * ftpd: HOSTNAME: [USER/PASS: ]CMD args (ftpd)
+01:02 < mulander> 403         */
+01:03 < mulander> is this explicitly skipping arguments for ftpd?
+01:05 < mulander> another thing to add to the list, but it looks like it and should probably go away by now
+01:05 < mulander> as I can think of much more commands that are actually used by people which could expose that user/pass and don't get special treatement
+01:06 < mulander> we saw pr_header and ttystat
+01:06 < mulander> and usage itself is typical
+01:06 < mulander> let's call it done for now, we identified at least 2 potential changes to make befor we move on with the read
+01:06 < mulander> --- DONE ---
