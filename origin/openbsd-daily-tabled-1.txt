@@ -1,0 +1,124 @@
+21:04 [Users #openbsd-daily]
+21:04 [@dlg           ] [ cengizIO       ] [ filwisher    ] [ kpcyrd  ] [ nnplv     ] [ smiles`      ] 
+21:04 [ __gilles      ] [ corbyhaas      ] [ fireglow     ] [ kranppa ] [ nopacienc3] [ stateless    ] 
+21:04 [ abecker       ] [ corsah         ] [ flopper      ] [ kraucrow] [ oldlaptop ] [ swankier     ] 
+21:04 [ akfaew        ] [ desnudopenguino] [ g0relike     ] [ kysse   ] [ owa       ] [ t_b          ] 
+21:04 [ akkartik      ] [ Dhole          ] [ geetam       ] [ landers2] [ pdvyas    ] [ tarug0       ] 
+21:04 [ antoon_i      ] [ dial_up        ] [ ghostyyy     ] [ lteo[m] ] [ petrus_lt ] [ tdmackey_    ] 
+21:04 [ antranigv     ] [ dmfr           ] [ Guest13989   ] [ lucias  ] [ philosaur ] [ Technaton    ] 
+21:04 [ apelsin       ] [ dostoyevsky    ] [ Guest85080   ] [ mandarg ] [ phy1729   ] [ thrym        ] 
+21:04 [ apotheon      ] [ DuClare        ] [ harrellc00per] [ mattl   ] [ polishdub ] [ timclassic   ] 
+21:04 [ azend|vps     ] [ duncaen        ] [ holsta       ] [ metadave] [ pstef     ] [ toddf        ] 
+21:04 [ bcallah       ] [ dxtr           ] [ horia        ] [ mikeb   ] [ qbit      ] [ toorop       ] 
+21:04 [ bcd           ] [ dzho           ] [ ija          ] [ moch    ] [ raf1      ] [ TronDD       ] 
+21:04 [ bch           ] [ eau            ] [ jaypatelani  ] [ mulander] [ rain1     ] [ TuxOtaku     ] 
+21:04 [ biniar        ] [ ebag           ] [ jbernard     ] [ Naabed-_] [ rEv9      ] [ vbarros      ] 
+21:04 [ brianpc       ] [ emigrant       ] [ job          ] [ nacci   ] [ rgouveia  ] [ VoidWhisperer] 
+21:04 [ brianritchie  ] [ entelechy      ] [ jsing        ] [ nacelle ] [ rnelson   ] [ vyvup        ] 
+21:04 [ brtln         ] [ epony          ] [ jwit         ] [ nailyk  ] [ rwrc      ] [ weezelding   ] 
+21:04 [ bruflu        ] [ erethon        ] [ kAworu       ] [ nand1   ] [ S007      ] [ wilornel     ] 
+21:04 [ brynet        ] [ fcambus        ] [ kittens      ] [ nasuga  ] [ salva0    ] [ xor29ah      ] 
+21:04 [ cedriczirtacic] [ fdiskyou       ] [ kl3          ] [ Niamkik ] [ skrzyp    ] [ zelest       ] 
+21:04 -!- Irssi: #openbsd-daily: Total of 120 nicks [1 ops, 0 halfops, 0 voices, 119 normal]
+21:05 < mulander> --- code read: pf tables from userland ---
+21:05 < mulander> *** goal: learn how a userland process can fill up tables used by pf ***
+21:06 < mulander> I am considering writing an utility that will need such functionality, so might as well utilise my reading time towards that goal
+21:06 < mulander> I was pointed out at bgpd and dhcpd as two userland daemons that already interact with pf tables
+21:07 < mulander> so let's open up code for them
+21:07 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/
+21:07 < weezelding> mulander: have a look on package "tabled"
+21:07 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/
+21:08 < mulander> weezelding: in ports?
+21:08 < weezelding> yes
+21:08 < mulander> nice
+21:08 < weezelding> should probably give you some answers :)
+21:09 < mulander> that doesn't look like an external project
+21:10 < mulander> ok it has a defunct homepage
+21:10 < mulander> http://www.etc.msys.ch/software/tabled/
+21:11 < mulander> looks like written by mbalmer
+21:12 < mulander> weezelding: thanks that helps me a lot long term
+21:12 < mulander> now how do we read this
+21:12 < weezelding> mulander: no problem, glad to help
+21:13 < mulander> as this is a much better read target for what I want to achieve
+21:13 < mulander> and still openbsd related as will teach us the api's used
+21:15 < mulander> I guess I will have to upload it to a repo
+21:18 < mulander> weezelding: the port states it's BSD licensed but that looks like ISC to me
+21:23 < weezelding> mulander: at least tabled.c seems to have ~same license as /usr/share/misc/license.template
+21:23 < mulander> yep
+21:23 < mulander> I'm about to just push it to github
+21:23 < mulander> for reading purposes
+21:24 < mulander> will ask mbalmer later on where development of this stands
+21:24 < mulander> wonder if it works :>
+21:24 < weezelding> at least it still in ports :)
+21:27 < mulander> https://github.com/mulander/tabled
+21:29 < mulander> installing the port to see if it works
+21:33 < mulander> looks like the tool can add single addresses or clear a table
+21:36 < mulander> $ doas pfctl -t children -T show | grep 4.4.4.4
+21:36 < mulander> $ tablec -t children -c add 4.4.4.4
+21:36 < mulander> add children 4.4.4.4
+21:36 < mulander> $ doas pfctl -t children -T show | grep 4.4.4.4
+21:36 < mulander> not feeling it
+21:36 < mulander> the daemon is running
+21:39 < mulander> tried starting tabled itself in verbose mode
+21:39 < mulander> no output
+21:40 < mulander> I am eithr doing something wrong or this currently doesn't work
+21:40 < mulander> https://gist.github.com/mulander/0bf909342937b7ea75916aaaf916f54a I did create the sock
+21:42 < mulander> well let's at least see what it tries to do
+21:42 < mulander> https://github.com/mulander/tabled/blob/master/tablec/tablec.c
+21:42 < mulander> https://github.com/mulander/tabled/blob/master/tablec/tablec.c#L121 - jumping to main
+21:43 < mulander> getopt parsing, seems it's missing 
+21:43 < mulander> argc -= optind; 
+21:43 < mulander> argv += optind;
+21:43 < mulander> after the loop
+21:44 < mulander> cmd will be 'add'
+21:44 < mulander> table will be parsed as children
+21:45 < mulander> fd is either host port or stdout
+21:45 < mulander> so we have to point it at the .sock file it doesn't default to it
+21:45 < mulander> with -f
+21:46 < mulander> let's retry our test
+21:46 < mulander> takes a loong time
+21:47 < weezelding> where does it spends its time if you run ktrace
+21:47 < mulander> I think it's stuck
+21:47 < mulander> will try attaching gdb
+21:48 < mulander> ugh no debug symbols right
+21:50 < mulander>  22547 tablec   CALL  open(0x7f7ffffbf692,0<O_RDONLY>)
+21:50 < mulander>  22547 tablec   NAMI  "/var/run/tabled.sock"
+21:50 < mulander>  22547 tablec   PSIG  SIGINT SIG_DFL
+21:50 < mulander> sit's there
+21:50 < mulander> ah stupid me
+21:50 < mulander> -f is for reaeding inputs
+21:52 < mulander> #  pfctl -t children -T show | grep 4.4.4.4                                                                                                                                                     
+21:52 < mulander> # doas tablec -t children -c add 4.4.4.4 >> /var/run/tabled.sock                                                                                                                                
+21:52 < mulander> #  pfctl -t children -T show | grep 4.4.4.4                       
+21:52 < mulander>    4.4.4.4
+21:52 < mulander> ok it works
+21:54 < mulander> so so far from glimpsing over the code
+21:54 < mulander> we know tabled is split into at least 2 processes
+21:54 < mulander> and I saw the tabled spawning processes itself
+21:54 < mulander> which communicate over a socket, or tcpip
+21:56 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:56 < mulander> $ doas tabled -v
+21:56 < mulander> tabled: start unprivileged child process
+21:56 < mulander> tabled[80143]: connection closed by peer
+21:56 < mulander> tabled[32139]: added 1/1 addresses for host 4.4.4.4 to table children
+21:56 < mulander> ^Ctabled: waiting for all child processes to terminate
+21:56 < mulander> tabled: child processes have terminated
+21:57 < mulander> in our case we know the parent reads from the sock
+21:57 < weezelding> you are running tablec as root, does it work without doas?
+21:57 < mulander> $ tabled
+21:57 < mulander> tabled: tabled: need root privileges
+21:58 < mulander> it's possible it's no longer developed because pfctl has the ability to directly modify tables now
+21:58 < mulander> will have to track  through history
+21:58 < mulander> and see what happened with it
+21:58 < mulander> the man pages contain info of who was the original author
+21:59 < mulander> still even in this form that will help me achieve my goal
+21:59 < mulander> we could even pick this port up for cleanup
+21:59 < mulander> in case no one else maintains it and there are still people using it
+21:59 < mulander> or just put the axe to it
+22:00 < mulander> ok, let's call it a day and continue tomorrow
+22:00 < mulander> we know that it does work
+22:00 < mulander> so the way it interacts with pf tables is still valid
+22:00 < mulander> we will though need to cross check if the API it uses matches what dhcpd and bgpd has these days
+22:00 < mulander> but that's for later
+22:00 < mulander> --- DONE ---
+

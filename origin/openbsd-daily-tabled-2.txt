@@ -1,0 +1,125 @@
+21:08 [Users #openbsd-daily]
+21:08 [@dlg           ] [ Dhole         ] [ FRIGN        ] [ kremlin   ] [ owa      ] [ Technaton    ] 
+21:08 [ __gilles      ] [ dial_up       ] [ g0relike     ] [ kysse     ] [ petrus_lt] [ thrym        ] 
+21:08 [ akfaew        ] [ dmfr          ] [ geetam       ] [ landers2  ] [ philosaur] [ timclassic   ] 
+21:08 [ akkartik      ] [ dostoyevsky   ] [ ghostyyy     ] [ lteo[m]   ] [ phy1729  ] [ toddf        ] 
+21:08 [ antoon_i      ] [ DuClare       ] [ Guest13989   ] [ lucias    ] [ pstef    ] [ toorop       ] 
+21:08 [ antranigv     ] [ duncaen       ] [ Guest85080   ] [ mandarg   ] [ qbit     ] [ TronDD       ] 
+21:08 [ apelsin       ] [ dxtr          ] [ harrellc00per] [ mattl     ] [ raf1     ] [ TuxOtaku     ] 
+21:08 [ apotheon      ] [ dzho          ] [ holsta       ] [ metadave  ] [ rEv9     ] [ vbarros      ] 
+21:08 [ azend|vps     ] [ eau           ] [ ija          ] [ mikeb     ] [ rgouveia ] [ VoidWhisperer] 
+21:08 [ bcallah       ] [ ebag          ] [ jaypatelani  ] [ moch      ] [ rnelson  ] [ vyvup        ] 
+21:08 [ bcd           ] [ emigrant      ] [ jbernard     ] [ mulander  ] [ rwrc     ] [ weezelding   ] 
+21:08 [ bch           ] [ entelechy     ] [ job          ] [ Naabed-_  ] [ S007     ] [ wilornel     ] 
+21:08 [ biniar        ] [ epony         ] [ jsing        ] [ nacci     ] [ salva0   ] [ xcko         ] 
+21:08 [ brianpc       ] [ erethon       ] [ jwit         ] [ nacelle   ] [ skrzyp   ] [ xor29ah      ] 
+21:08 [ brtln         ] [ fcambus       ] [ kAworu       ] [ nailyk    ] [ smiles`  ] [ zelest       ] 
+21:08 [ bruflu        ] [ fdiskyou      ] [ kittens      ] [ nand1     ] [ stateless] 
+21:08 [ brynet        ] [ filwisher     ] [ kl3          ] [ Niamkik   ] [ swankier ] 
+21:08 [ cedriczirtacic] [ fireglow      ] [ kpcyrd       ] [ nnplv     ] [ t_b      ] 
+21:08 [ cengizIO      ] [ flopper       ] [ kranppa      ] [ nopacienc3] [ tarug0   ] 
+21:08 [ corsah        ] [ freakazoid0223] [ kraucrow     ] [ oldlaptop ] [ tdmackey_] 
+21:08 -!- Irssi: #openbsd-daily: Total of 115 nicks [1 ops, 0 halfops, 0 voices, 114 normal]
+21:08 < mulander> --- code read: tabled - managing pf tables from userland ---
+21:08 < mulander> *** goal: learn how to interact with pf tables from userland ***
+21:08 < mulander> yesterday thank to weezelding we learned abou the existence of sysutils/tabled
+21:09 < mulander> we dug out the code and took a look at it
+21:09 < mulander> additionaly testing if it still works
+21:09 < mulander> code: https://github.com/mulander/tabled (there is no official remaining repository/homepage)
+21:11 < mulander> now tabled is split into a daemon and a client
+21:11 < mulander> the client is used to communicate with tabled across the network or a socket
+21:11 < mulander> we tested socket communication
+21:13 < mulander> we will now take a look at the tabled, how it works and where it interacts with pf
+21:13 < mulander> general overview as always
+21:13 < mulander> imsg.[ch] - interprocess comunication (we are making broad guesses until we look at the code)
+21:13 < mulander> buffer.c - buffering, on the socket/network?
+21:13 < mulander> parse.y - we saw that many times, parsing configuration
+21:14 < mulander> pathnames.h - path handling? defines?
+21:14 < mulander> pftable.c - perhaps where we communicate with pf
+21:14 < mulander> pickup.c - I assume this takes commands from the network or the socket file
+21:14 < mulander> scan.l - no idea? parsing the network format?
+21:14 < mulander> socket.c - socket handling
+21:14 < mulander> tabled.8 - the manual
+21:15 < mulander> tabled.c - the main program
+21:15 < mulander> tabled.conf - sample configuration
+21:15 < mulander> tabled.conf.5 - manual for that ^
+21:15 < mulander> tabled.h - common defines?
+21:15 < mulander> and tablec/* - the client
+21:17 < mulander> let's jump into main tabled.c
+21:17 < mulander> defines and includes first
+21:17 < mulander> a sighdlr
+21:18 < mulander> pretty self explanatory
+21:18 < mulander> same for usage
+21:18 < mulander> and we hit main
+21:19 < mulander> command line handling
+21:20 < mulander> ^ as in getopt
+21:20 < mulander> a call to parse and init the config
+21:20 < mulander> log handling, root check, user check
+21:21 < mulander> detaching from the terminal
+21:21 < mulander> then looping infinitly
+21:22 < mulander> we are setting up a socket pair, we saw that previously with doas, before brynet simplified it
+21:22 < mulander> and now we see that tabled is a 2 process beast
+21:22 < mulander> the main process
+21:22 < mulander> and one for picking up commands that come in over the network
+21:23 < brynet> mulander: you mean file? :-)
+21:24 < mulander> ah right, sorry brynet :)
+21:24 < mulander> yes I had file in mind
+21:26 < mulander> ok so it looks like the child is spawned by p_main
+21:26 < mulander> that's externally defined
+21:26 < mulander> I make a guess it will be in the pickup.c
+21:27 < mulander> https://github.com/mulander/tabled/blob/master/pickup.c#L219
+21:27 < mulander> yay
+21:27 < mulander> so we fork off the child
+21:27 < mulander> do some checks, allocate memory needed if we are working over the network
+21:28 < mulander> we don't care on the network handling as we were over file
+21:28 < mulander> as in a .sock
+21:29 < mulander> https://github.com/mulander/tabled/blob/master/pickup.c#L339
+21:30 < mulander> so we select from our possible input sources
+21:30 < mulander> either network or a sock file
+21:31 < mulander> and finally end up in handle_read
+21:31 < mulander> https://github.com/mulander/tabled/blob/master/pickup.c#L196
+21:33 < mulander> and handle_line 
+21:33 < mulander> https://github.com/mulander/tabled/blob/master/pickup.c#L160
+21:34 < mulander> which parses our command
+21:34 < mulander> does an optional SHA check (feature for over the network authentication)
+21:36 < mulander> then based on the command (add or clr)
+21:36 < mulander> we call pf_table_add or pf_table_clr
+21:36 < mulander> https://github.com/mulander/tabled/blob/master/pickup.c#L86
+21:37 < mulander> we parse the remaining bits and send of an imsg to the parent
+21:37 < mulander> let's find where the parent handles IMSG_PFTABLE_ADD
+21:37 < mulander> https://github.com/mulander/tabled/blob/b22ff869bf1499905b06fba0a493387b6b7e928a/tabled.c#L272
+21:37 < mulander> dispatch_imsg
+21:37 < mulander> we saw that being called in our parent process loop
+21:38 < mulander> it's called on each message from the pickup child
+21:38 < mulander> reads the imsg
+21:38 < mulander> switches over the type of message
+21:38 < mulander> we can se both PFTABLE_ADD and DEL
+21:39 < mulander> calling into pftable_addr_add
+21:39 < mulander> and pf_table_addr_del
+21:39 < mulander> https://github.com/mulander/tabled/blob/b22ff869bf1499905b06fba0a493387b6b7e928a/pftable.c#L176
+21:39 < mulander> our pf_table_addr_add
+21:39 < mulander> starts with a call to pftable_modify
+21:39 < mulander> passing something that looks like an ioctl name
+21:40 < mulander> and does some internal book keeping based on the result of that call
+21:40 < mulander> same for _del
+21:40 < mulander> lets look at modify which is called by both
+21:40 < mulander> https://github.com/mulander/tabled/blob/b22ff869bf1499905b06fba0a493387b6b7e928a/pftable.c#L79
+21:41 < mulander> the pf device is opened for read and write
+21:41 < mulander> we try to resolve the provided address 
+21:42 < mulander> and call an ioctl on the /dev/pf device
+21:42 < mulander> if we check the pf man page
+21:42 < mulander> https://man.openbsd.org/pf
+21:42 < mulander> indeed we see DIOCRADDADDRS struct pfioc_table *io
+21:42 < mulander> Add one or more addresses to a table. 
+21:43 < mulander> and a description of each filed in the struct
+21:43 -!- freakazoid0223_ is now known as freakazoid0223
+21:43 < mulander> and 
+21:43 < mulander>  
+21:43 < mulander> DIOCRDELADDRS struct pfioc_table *io
+21:43 < mulander> Delete one or more addresses from a table. 
+21:44 < mulander> so the actual way to interact with pf tables is much easier than anticipated
+21:44 < mulander> - open the device with read/write mode
+21:44 < mulander> - prepare a structure based on the required ioctl
+21:44 < mulander> - call the ioctl on the device
+21:45 < mulander> and that covers our target goal
+21:45 < mulander> --- DONE ---

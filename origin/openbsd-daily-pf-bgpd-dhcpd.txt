@@ -1,0 +1,196 @@
+21:00 [Users #openbsd-daily]
+21:00 [@dlg      ] [ def        ] [ FRIGN        ] [ kremlin   ] [ owa      ] [ Technaton    ] 
+21:00 [ __gilles ] [ Dhole      ] [ g0relike     ] [ kysse     ] [ petrus_lt] [ thrym        ] 
+21:00 [ abecker  ] [ dial_up    ] [ geetam       ] [ landers2  ] [ philosaur] [ timclassic   ] 
+21:00 [ akfaew   ] [ dmfr       ] [ ghostyyy     ] [ lteo[m]   ] [ phy1729  ] [ toddf        ] 
+21:00 [ akkartik ] [ dostoyevsky] [ Guest13989   ] [ lucias    ] [ pstef    ] [ toorop       ] 
+21:00 [ antoon_i ] [ DuClare    ] [ Guest85080   ] [ mandarg   ] [ qbit     ] [ TuxOtaku     ] 
+21:00 [ antranigv] [ duncaen    ] [ harrellc00per] [ mattl     ] [ raf1     ] [ vbarros      ] 
+21:00 [ apelsin  ] [ dxtr       ] [ holsta       ] [ metadave  ] [ rEv9     ] [ VoidWhisperer] 
+21:00 [ apotheon ] [ dzho       ] [ ija          ] [ mikeb     ] [ rgouveia ] [ vyvup        ] 
+21:00 [ azend|vps] [ eau        ] [ jbernard     ] [ moch      ] [ rnelson  ] [ weezelding   ] 
+21:00 [ bcallah  ] [ ebag       ] [ job          ] [ mulander  ] [ rwrc     ] [ Wilawar      ] 
+21:00 [ bcd      ] [ emigrant   ] [ jrmu         ] [ Naabed-_  ] [ S007     ] [ wilornel     ] 
+21:00 [ bch      ] [ entelechy  ] [ jsing        ] [ nacci     ] [ salva0   ] [ xcko         ] 
+21:00 [ biniar   ] [ epony      ] [ jwit         ] [ nacelle   ] [ skrzyp   ] [ xor29ah      ] 
+21:00 [ brianpc  ] [ erethon    ] [ kAworu       ] [ nailyk    ] [ smiles`  ] [ zelest       ] 
+21:00 [ brtln    ] [ fcambus    ] [ kittens      ] [ nand1     ] [ stateless] 
+21:00 [ bruflu   ] [ fdiskyou   ] [ kl3          ] [ Niamkik   ] [ swankier ] 
+21:00 [ brynet   ] [ filwisher  ] [ kpcyrd       ] [ nnplv     ] [ t_b      ] 
+21:00 [ cengizIO ] [ fireglow   ] [ kranppa      ] [ nopacienc3] [ tarug0   ] 
+21:00 [ corsah   ] [ flopper    ] [ kraucrow     ] [ oldlaptop ] [ tdmackey_] 
+21:00 -!- Irssi: #openbsd-daily: Total of 115 nicks [1 ops, 0 halfops, 0 voices, 114 normal]
+21:00 < mulander> --- code read: pf tables from userland ---
+21:01 < mulander> *** goal: how to work with pf tables from userland, cross check with bgpd and dhcpd ***
+21:01 < mulander> if that goes fast we might look at how privdrop is implemntd
+21:01 < mulander> *implemented and I might go into detail on why I am reading about this specifically
+21:01 < mulander> *how to implement privdrop in your app
+21:01 < mulander> not how privdrop is implemented per-se
+21:02 < mulander> on last read we learned that tabled uses ioctl's on /dev/pf to manipulate tables
+21:02 < mulander> I want to cross check in bgpd and dhcpd
+21:03 < mulander> if that's still the sanctioned way to do this
+21:03 < mulander> or if there's a new API
+21:03 < mulander> code: http://bxr.su/OpenBSD/usr.sbin/bgpd/
+21:03 < mulander> code: http://bxr.su/OpenBSD/usr.sbin/dhcpd/
+21:04 < mulander> I went through the names for something that looked pf related
+21:05 < mulander> and found a file in each
+21:05 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/pftable.c
+21:05 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c
+21:05 < mulander> quick check confirms that both do an ioctl call
+21:05 < mulander> but lets actually read both implementations, to see how they differ
+21:05 < mulander> a quick glimpse made me think they are quite similar
+21:05 < mulander> in design
+21:09 < mulander> let's start with http://bxr.su/OpenBSD/usr.sbin/bgpd/pftable.c
+21:09 < mulander> set of includes, undefs to avoid namespace collisions
+21:09 < mulander> there's a linked list for pf table entries
+21:10 < mulander> ah sorry
+21:10 < mulander> linked list of tables
+21:10 < mulander> not entries
+21:10 < mulander> a pftable_change function
+21:11 < mulander> taking a pf_table struct which we saw defined above
+21:11 < mulander> on line 66 we see a check on the pf device
+21:11 < mulander> if unset we attempt to open it read & write
+21:11 < mulander> and bail with error if we can't
+21:12 < mulander> bzero is called to clear the struct
+21:12 < mulander> wonder why bzero not memset
+21:12 < mulander> https://man.openbsd.org/bzero
+21:13 < mulander> don't think it has any specific meaning here
+21:13 < mulander> we fill up our local struct from the passed pft struct
+21:14 < mulander> and call an ioctl pft->what on our devpf device
+21:14 < mulander> that's it for pftable_Change
+21:14 < mulander> now I expected others to just call of that
+21:14 < mulander> but it seems it's not the case
+21:15 < mulander> on line 89 we have pftable_clear
+21:15 < mulander> it does the same open the device dance
+21:15 < mulander> clear the struct
+21:15 < mulander> and calls an explicitly named ioctl
+21:15 < mulander> ah ok, the big difference is the parameters
+21:15 < mulander> pftable_change is feed the struct
+21:15 < mulander> the others just get the table name and params
+21:16 < mulander> we saw those ioctls before and we know we can look them up in https://man.openbsd.org/pf
+21:17 -!- Wilawar-2 is now known as Wilawar
+21:17 < mulander> now pftable_exists
+21:17 < mulander> I will skip the duplicated sections
+21:17 < mulander> they are pretty obvious
+21:18 < mulander> same for the ioctl
+21:18 < mulander> add is slithgly different
+21:18 < mulander> it's not related to acting on the table
+21:18 < mulander> but on the list of managed tables it seems
+21:19 < mulander> it skips duplicates and add a new entry to the linked list
+21:19 < mulander> line 158 - pftable_clear_all just iterates over the linked list calling pftable_clear we saw before on each element
+21:20 < mulander> we also learn that naddrs must stand for how many entries we think the pf table has
+21:20 < mulander> line 175 pftable_add_Work
+21:21 < mulander> 182    if (*table == '\0' || len > 128)
+21:21 < mulander> 183        fatal("pftable_add_work: insane");
+21:21 < mulander> hah, lovely message
+21:21 < mulander> so if the table has no name, or we add more than 128 somethings we are insane
+21:22 < mulander> we will learn what len refers to in abit
+21:22 < mulander> after that check
+21:23 < mulander> we find the table we should work on
+21:23 < mulander> bail if that table is not managed by us
+21:23 < mulander> we either delete or add addresses
+21:23 < mulander> never both
+21:25 < mulander> we then allocate memory for our worklist, copy the data in and call pftable_Commit
+21:25 < mulander> if the list grew over 1k entries
+21:26 < mulander> ok so it is like a deferred queue
+21:26 < mulander> for changes to be made
+21:26 < mulander> that list will build up
+21:26 < mulander> and pftable_commit we see on line 245
+21:27 < mulander> just goes through the tables and calls pftable_change on it
+21:27 < mulander> which would call pftable_change on each entries for that table
+21:27 < mulander> resulting in entires being added/deleted
+21:28 < mulander> let's move on to dhcpd
+21:28 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c
+21:28 < mulander> again includes, I already see a pipe
+21:28 < mulander> so anticipate parent/child signalling
+21:29 < mulander> we see a pftable_handler being defined
+21:29 < mulander> as __dead so it never returns
+21:29 < mulander> and terminates the program on done
+21:29 < mulander> it tries to open /dev/pf
+21:29 < mulander> it's interesting to see the difference on how that is handled
+21:29 < mulander> 93    if (devpf == -1 && ((devpf = open("/dev/pf", O_RDWR)) == -1))
+21:29 < mulander> 94        fatal("open(/dev/pf)");
+21:30 < mulander> from bgpd just open read write
+21:30 < mulander> 55    if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW, 0660)) == -1)
+21:30 < mulander> 56        log_warn("can't open pf device");
+21:30 < mulander> O_NOFOLLOW
+21:30 < mulander> If last path element is a symlink, don't follow it.
+21:30 < mulander> wonder why this is here
+21:31 < mulander> if someone is curious it might be worthwile to check git blame/cvs annotate in both cases
+21:31 < mulander> to see if one was added later as a response to something
+21:32 < mulander> obviously I do understand why we don't want to follow a symlink
+21:32 < mulander> but wondering why dhcpd thinks it might have to protect against that and bgpd does not
+21:32 < mulander> moving on
+21:32 < mulander> ah
+21:32 < mulander> we are chrooted?
+21:32 < mulander> that could answer it
+21:33 < mulander> hmm or not as we chroot after opening the device
+21:33 < mulander> ok so
+21:33 < mulander> open device, chroot to /var/empty
+21:33 < mulander> chdir to /
+21:33 < mulander> (inside the chroot)
+21:34 < mulander> and drop our privileges
+21:34 < mulander> and we rename our process to pf table handler
+21:34 < mulander> we then loop forever on line 69
+21:35 < mulander> pooling for events on a global pfpipe
+21:36 < mulander> we then do an atomic read
+21:37 < mulander> into a
+21:37 < mulander> 270/* privsep message. fixed length for easy parsing */
+21:37 < mulander> 271struct pf_cmd {
+21:37 < mulander> 272    struct in_addr ip;
+21:37 < mulander> 273    u_int32_t type;
+21:37 < mulander> 274};
+21:37 < mulander> so we get an address and a type of command
+21:37 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c#87
+21:37 < mulander> will skip copying the verbose comments here
+21:37 < mulander> do read them though
+21:38 < mulander> and that results in specific pf_change_table calls
+21:39 < mulander> passing in fd (our /dev/pf), operation (0|1), the ip and the table name
+21:39 < mulander> pf_change_table is defined on 137
+21:39 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c#137
+21:39 < mulander> 135/* inspired by ("stolen") from usr.sbin/authpf/authpf.c */
+21:39 < mulander> 136void
+21:39 < mulander> 137pf_change_table(int fd, int op, struct in_addr ip, char *table)
+21:41 < mulander> it does a similar thing we saw before
+21:41 < mulander> memset (instead of bzero) of the struct
+21:41 < mulander> copying data
+21:41 < mulander> and calling an ioctl
+21:41 < mulander> either to add or delete addresses based on op
+21:42 < mulander> so for 1 we add, for 0 we delete
+21:42 < mulander> next up is pf_kill_state which I might need later
+21:42 < mulander> so pf is a stateful firewall
+21:42 < mulander> let's say you have an open telnet connection to my mail server on tintagel.pl
+21:43 < mulander> and I find you abusive so I execute `pfctl -t children -T add $YOUR_IP`
+21:43 < mulander> the moment that returns you won't be able to open a new telnet session
+21:43 < mulander> to any port on my server
+21:43 < mulander> but the one you have open remains active and usable
+21:44 < mulander> as that state was valid for the configuration active when you connected
+21:44 < mulander> in order to drop you from my server, I have to execute `pfctl -k $YOUR_IP` which will drop all active states in the firewall from your ip
+21:44 < mulander> when that's done, you are disconnected with no way to come back.
+21:45 < mulander> pf_kill_state calls an ioctl used by -k in pfctl
+21:45 < mulander> the remaining bits are pretty much the same
+21:45 < mulander> note it's killing both incoming and outgoing states
+21:45 < mulander> hence why we are calling it twice
+21:45 < mulander> (as in 2 ioctl calls)
+21:46 < mulander> 1 to kill states from target
+21:46 < mulander> and once to kill states t  target
+21:46 < mulander> next up we have an atomic io helper stolen from ssh
+21:46 < mulander> and pfmsg
+21:46 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:46 < mulander> 221/*
+21:46 < mulander> 222 * This function sends commands to the pf table handler. It will safely and
+21:46 < mulander> 223 * silently return if the handler is unconfigured, therefore it can be called
+21:46 < mulander> 224 * on all interesting lease events, whether or not the user actually wants to
+21:46 < mulander> 225 * use the pf table feature.
+21:46 < mulander> 226 */
+21:46 < mulander> 227void
+21:46 < mulander> 228pfmsg(char c, struct lease *lp)
+21:47 < mulander> this returns if there is no pipe
+21:47 < mulander> and calls atomicio vwrite on the pfpipe
+21:47 < mulander> that the client picks up from
+21:47 < mulander> vwrite is a macro
+21:47 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/dhcpd.h#563
+21:47 < mulander> for the write call being passed
+21:48 < mulander> http://bxr.su/s?defs=vwrite&project=OpenBSD - looking that up shows that the pattern is reused quite a lot
+21:48 < mulander> and that covers both bgpd and dhcpd
+21:48 < mulander> --- DONE ---
