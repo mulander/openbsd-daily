@@ -1,0 +1,179 @@
+21:00 [Users #openbsd-daily]
+21:00 [@dlg           ] [ def            ] [ flopper       ] [ kpcyrd  ] [ nopacienc3] [ smiles`      ] 
+21:00 [ __gilles      ] [ desnudopenguino] [ freakazoid0223] [ kranppa ] [ oldlaptop ] [ stateless    ] 
+21:00 [ abecker       ] [ Dhole          ] [ FRIGN         ] [ kraucrow] [ owa       ] [ t_b          ] 
+21:00 [ akfaew        ] [ dial_up        ] [ g0relike      ] [ kremlin ] [ petrus_lt ] [ tarug0       ] 
+21:00 [ akkartik      ] [ dmfr           ] [ geetam        ] [ kysse   ] [ philosaur ] [ tdmackey_    ] 
+21:00 [ antoon_i      ] [ dostoyevsky    ] [ ghostyyy      ] [ landers2] [ phy1729   ] [ Technaton    ] 
+21:00 [ antranigv     ] [ DuClare        ] [ Guest13989    ] [ lteo[m] ] [ polishdub ] [ thrym        ] 
+21:00 [ apelsin       ] [ duncaen        ] [ Guest85080    ] [ lucias  ] [ pstef     ] [ timclassic   ] 
+21:00 [ apotheon      ] [ dxtr           ] [ harrellc00per ] [ mandarg ] [ qbit      ] [ toddf        ] 
+21:00 [ azend|vps     ] [ dzho           ] [ holsta        ] [ mattl   ] [ raf1      ] [ toorop       ] 
+21:00 [ bcallah       ] [ eau            ] [ ija           ] [ metadave] [ rgouveia  ] [ turlando     ] 
+21:00 [ bcd           ] [ ebag           ] [ jaypatelani   ] [ mikeb   ] [ rnelson   ] [ TuxOtaku     ] 
+21:00 [ bch           ] [ emigrant       ] [ jbernard      ] [ mulander] [ rwrc      ] [ vbarros      ] 
+21:00 [ brianpc       ] [ entelechy      ] [ job           ] [ Naabed- ] [ S007      ] [ VoidWhisperer] 
+21:00 [ brtln         ] [ epony          ] [ jrmu          ] [ nacci   ] [ salva0    ] [ vyvup        ] 
+21:00 [ bruflu        ] [ erethon        ] [ jsing         ] [ nacelle ] [ sam_c     ] [ weezelding   ] 
+21:00 [ brynet        ] [ fcambus        ] [ jwit          ] [ nailyk  ] [ Schoentoon] [ wilornel     ] 
+21:00 [ cedriczirtacic] [ fdiskyou       ] [ kAworu        ] [ nand1   ] [ SETW      ] [ xor29ah      ] 
+21:00 [ cengizIO      ] [ filwisher      ] [ kittens       ] [ Niamkik ] [ skizye    ] [ zelest       ] 
+21:00 [ corsah        ] [ fireglow       ] [ kl3           ] [ nnplv   ] [ skrzyp    ] 
+21:00 -!- Irssi: #openbsd-daily: Total of 119 nicks [1 ops, 0 halfops, 0 voices, 118 normal]
+21:00 < mulander> --- code read: dhcpd pf handler cleanup ---
+21:03 < mulander> *** goal: dhcpd doesn't clean up the pf handler forked child when quitting ***
+21:03 < mulander> we did a read of dhcpd and bgpd pf handling yesterday
+21:03 < mulander> on twitter sthen@ pointed out that the pf handler is not cleaned up
+21:04 < mulander> https://twitter.com/sthen_/status/884184575232143361
+21:04 < mulander> our goal will be to
+21:04 < mulander> a) reproduce the issue
+21:04 < mulander> b) see how this is handled in other daemons that fork children
+21:05 < mulander> c) write a fix
+21:05 < mulander> we might not be able to do all in a single sitting
+21:05 < mulander> I made a minimal config to reproduce the issue
+21:06 < mulander> /bin/sh: /etc/dhcpd.conf: cannot execute - Permission denied
+21:06 < mulander> sorry :)
+21:06 < mulander> subnet 45.63.9.186 netmask 255.255.255.224 {
+21:06 < mulander>   range 45.63.9.186 45.63.9.186;
+21:06 < mulander> }
+21:07 < mulander> in /etc/dhcpd.conf
+21:07 < mulander> mostly to just pass initial validation
+21:07 < mulander> rcctl enable dhcpd
+21:07 < mulander> rcctl set dhcpd flags -A test
+21:07 < mulander> enable the daemon and set the -A test flag
+21:07 < mulander> as we know the table handler is only spawned when certain features are used
+21:07 < mulander> -A is one of them
+21:07 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/dhcpd.c#219 is the check
+21:08 < mulander> next a nice oneliner test from sthen
+21:08 < mulander> rcctl start dhcpd; rcctl stop dhcpd; pgrep -lf dhcpd
+21:08 < mulander> # rcctl start dhcpd; rcctl stop dhcpd; pgrep -lf dhcpd
+21:08 < mulander> dhcpd(ok)
+21:08 < mulander> dhcpd(ok)
+21:08 < mulander> 96584 dhcpd: pf table handler
+21:08 < mulander> so we can see the 'pf table handler' is left hanging
+21:08 < mulander> after dhcpd quits
+21:10 < mulander> so we have the problem reproduced.
+21:11 < mulander> now it would be nice to find a solid example on how to handle this
+21:11 < mulander> any suggestions or code we should look at?
+21:11  * mulander waits for suggestions while looking around
+21:12 < mulander> smtpd, bgpd all spawn children
+21:12 < mulander> and manage to close them all nicely
+21:12 < mulander> file had a child before brynet aborted it
+21:12 < mulander> we could look at that also
+21:17 < brynet> so the dhcpd parent isn't waiting for the pf table handler child to exit.
+21:17 < mulander> yes
+21:17 < mulander> brynet: also the parent has no signal handlers
+21:18 < mulander> so I assume it wouldn't wait if he got a kill signal etc
+21:19 < mulander> I took a look at file before the change
+21:19 < mulander> it had a simpler model, as both child and parent were terminal
+21:19 < mulander> in case of dhcpd child has a for(;;) loop with no exit condition
+21:19 < mulander> and the same is true for the parent
+21:21 < mulander> ok time to look at bgpd
+21:21 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/bgpd.c#208
+21:21 < mulander> bgpd calls start_child for each process
+21:22 < mulander> the main program spawns two
+21:22 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/bgpd.c#start_child
+21:22 < mulander> start_child does the regular fork then re-execs itself
+21:23 < mulander> we see signal handlers registered
+21:23 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/bgpd.c#sighdlr
+21:23 < mulander> on SIGTERM and SIGINT we flag a global quit
+21:26 < mulander> the main process loop on quit == 0
+21:26 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/bgpd.c#255
+21:26 < mulander> if that ever bails
+21:26 < mulander> the imsg pipes are being closed
+21:27 < mulander> and the bit that's interesting to us
+21:27 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/bgpd.c#359
+21:28 < mulander> and I think that's all that we need
+21:28 < mulander> let's take a look at our dhcpd code again
+21:29 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/dhcpd.c#220
+21:30 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c
+21:30 < mulander> http://bxr.su/s?refs=pftable_handler&project=OpenBSD
+21:30 < mulander> first pftable_handler
+21:30 < mulander> thinking out loud not making changes yet
+21:30 < mulander> ah I didn't check how the child was signalled
+21:30 < mulander> in bgpd
+21:34 < mulander> so aftr re-executing
+21:34 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/rde.c#175 - R
+21:34 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/session.c#192 - S
+21:35 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/session.c#session_sighdlr handler for -S
+21:35 < mulander> sets session_quit
+21:35 < mulander> when it receives a signal
+21:36 < mulander> loops when session_quit = 0
+21:36 < mulander> k I think I see it
+21:36 < mulander> http://bxr.su/OpenBSD/usr.sbin/bgpd/session.c#488
+21:37 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:37 < mulander> 488        if (handle_pollfd(&pfd[PFD_PIPE_MAIN], ibuf_main) == -1) {
+21:37 < mulander> 489            log_warnx("SE: Lost connection to parent");
+21:37 < mulander> 490            session_quit = 1;
+21:37 < mulander> 491            continue;
+21:37 < mulander> 492        } else
+21:37 < mulander> 493            session_dispatch_imsg(ibuf_main, PFD_PIPE_MAIN,
+21:37 < mulander> 494                &listener_cnt);
+21:37 < mulander> so it detects that the parent closed the imsg pipe
+21:37 < mulander> and decides to kill itself
+21:38 < mulander> when the loop is done it does a small cleanup and ends
+21:38 < brynet> dhcpd doesn't use imsg, but instead rolls its own message passing, parent seems to send messages to the child using pfmsg.
+21:38 < brynet> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c#228
+21:39 < brynet> There's no special handling of exiting in dhcpd parent that I can see, so the child could possibly just exit instead of log warn.
+21:40 < brynet> I'm also just tossing ideas around.
+21:40 < mulander> the child has no way to tell the parent would close an fd
+21:40 < mulander> and yeah dhcpd has no handler for graceful shutdown
+21:41 < mulander> guess there possibly is a way to stat a pipe
+21:41 < mulander> or I should read into atomicio
+21:41 < mulander> maybe it returns that the fd is done
+21:42 < mulander> it ignores EINTR and EAGAIN
+21:42 < mulander> it still should set errno I think
+21:42 < mulander> so my hazy thinkng right now
+21:42 < mulander> would be to register a signal handler in dhcpd parent
+21:42 < mulander> turn the infinite loop into one based on a quit flag
+21:43 < mulander> have the parent quit if it gets signalled
+21:43 < mulander> closing the pipe
+21:43 < mulander> the child checking if the pipe has been closed and doing a graceful shut down
+21:43 < mulander> instead of remaining in an infinite spin
+21:43 < mulander> brynet: thoughts?
+21:45 < brynet> If I understand, this is about the pf child process spinning after the parent is gone, probably logging as well.. I suspect some or all of those should be actually fatal.
+21:45 < mulander> # pgrep -lf dhcpd                                      
+21:45 < mulander> 96584 dhcpd: pf table handler
+21:46 < mulander> yes dhcpd main process is g one, pf table handler is running
+21:46 < mulander> how else would you know as the child to quit?
+21:46 < mulander> it's been running for 30 minutes and I believe it will never quit?
+21:46 < brynet> When the parent exits, the other side of the pipe is closed, child should be able to see that and just exit.
+21:48 < mulander> 81            r = atomicio(read, pfpipe[0], &cmd, l);
+21:48 < mulander> 82
+21:48 < mulander> 83            if (r != l)
+21:48 < mulander> 84                log_warn("pf pipe error");
+21:48 < mulander> 85
+21:48 < mulander> so instead of warning here, just fatal out?
+21:49 < mulander> or perhaps with an additional check that it's actually closed
+21:52 < mulander> A pipe whose read or write end has been closed is considered widowed. Writing on such a pipe causes the writing process to receive a SIGPIPE signal. Widowing a pipe is the only way to deliver end-of-file to a reader: after the reader consumes any buffered data, reading a widowed pipe returns a zero count.
+21:53 < mulander> brynet: so am I seeing correctly, it is actually handled on atomicio
+21:53 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c#211
+21:53 < mulander> we get 0 bytes on the pipe so we set errno to EPIPE
+21:54  * mulander checks if he can compile dhcpd on 6.1
+21:55 < mulander> ok I can
+21:56 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:56 < mulander> # ./dhcpd -A test
+21:56 < mulander> Listening on vio0 (45.63.9.186).
+21:56 < mulander> # pgrep -lf dhcpd
+21:56 < mulander> 73260 dhcpd: pf table handler
+21:56 < mulander> 42807 ./dhcpd -A test
+21:56 < mulander> # kill 42807
+21:56 < mulander> # pgrep -lf dhcpd 
+21:56 < mulander> 73260 dhcpd: pf table handler
+21:56 < mulander> reproduced on -current with the freshly compiled sources
+21:58 < brynet> I still think a lot of those log_warn/log_warnx calls should be fatal, presumably dhcpd shouldn't keep going here.
+21:58 < brynet> http://bxr.su/OpenBSD/usr.sbin/dhcpd/pfutils.c#76
+21:58 < brynet> But even the privdrop calls earlier just log and then keep going..
+21:59 < mulander> right
+21:59 < brynet> That's contrasted to the parent, which calls fatal().
+21:59 < mulander> I'm at the end of my allocated slot today, willing to hack on a diff and test it tomorrow
+22:00 < mulander> feel free if you want to get at it before the next read
+22:01 < brynet> I'll leave that to you, heh. I don't use this feature. It's probably worth a mail.
+22:01 < mulander> well the warnings do seem overdone
+22:01 < mulander> 55    if ((fd = open(_PATH_DEV_PF, O_RDWR|O_NOFOLLOW, 0660)) == -1)
+22:01 < mulander> 56        log_warn("can't open pf device");
+22:01 < mulander> the rest of the code has nothing to do
+22:01 < mulander> without acccess to /dev/pf
+22:02 < mulander> ok, but that's for tomorrow
+22:02 < mulander> --- DONE ---
+

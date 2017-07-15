@@ -1,0 +1,120 @@
+21:01 [Users #openbsd-daily]
+21:01 [@dlg           ] [ def            ] [ flopper       ] [ kysse     ] [ philosaur ] [ tarug0       ] 
+21:01 [ __gilles      ] [ desnudopenguino] [ freakazoid0223] [ landers2  ] [ phy1729   ] [ tdmackey_    ] 
+21:01 [ abecker       ] [ Dhole          ] [ g0relike      ] [ lteo[m]   ] [ polishdub ] [ Technaton    ] 
+21:01 [ akfaew        ] [ dial_up        ] [ geetam        ] [ lucias    ] [ pstef     ] [ thrym        ] 
+21:01 [ akkartik      ] [ dmfr           ] [ ghostyyy      ] [ mandarg   ] [ qbit      ] [ timclassic   ] 
+21:01 [ antoon_i      ] [ dostoyevsky    ] [ Guest13989    ] [ mattl     ] [ raf1      ] [ toddf        ] 
+21:01 [ antranigv     ] [ DuClare        ] [ gurwall_      ] [ metadave  ] [ rgouveia  ] [ toorop       ] 
+21:01 [ apotheon      ] [ duncaen        ] [ harrellc00per ] [ mikeb     ] [ rnelson   ] [ TuxOtaku     ] 
+21:01 [ azend|vps     ] [ dxtr           ] [ Harry         ] [ mulander  ] [ rwrc      ] [ vbarros      ] 
+21:01 [ bcallah       ] [ dzho           ] [ holsta        ] [ Naabed-   ] [ ryan      ] [ VoidWhisperer] 
+21:01 [ bcd           ] [ eau            ] [ ija           ] [ nacci     ] [ S007      ] [ vyvup        ] 
+21:01 [ bch           ] [ ebag           ] [ jbernard      ] [ nacelle   ] [ salva0    ] [ weezelding   ] 
+21:01 [ biniar        ] [ emigrant       ] [ job           ] [ nailyk    ] [ sam_c     ] [ wilornel     ] 
+21:01 [ brianpc       ] [ entelechy      ] [ jrmu          ] [ nand1     ] [ Schoentoon] [ xor29ah      ] 
+21:01 [ brtln         ] [ epony          ] [ jsing         ] [ Niamkik   ] [ skizye    ] [ zelest       ] 
+21:01 [ bruflu        ] [ erethon        ] [ jwit          ] [ nnplv     ] [ skrzyp    ] 
+21:01 [ brynet        ] [ fcambus        ] [ kAworu        ] [ nopacienc3] [ smiles`   ] 
+21:01 [ cedriczirtacic] [ fdiskyou       ] [ kl3           ] [ oldlaptop ] [ Soft      ] 
+21:01 [ cengizIO      ] [ filwisher      ] [ kpcyrd        ] [ owa       ] [ stateless ] 
+21:01 [ corsah        ] [ fireglow       ] [ kraucrow      ] [ petrus_lt ] [ t_b       ] 
+21:01 -!- Irssi: #openbsd-daily: Total of 115 nicks [1 ops, 0 halfops, 0 voices, 114 normal]
+21:02 < mulander> --- code read: /usr/bin/finger ---
+21:02 < mulander> *** goal: general read ***
+21:04 < mulander> code: http://bxr.su/OpenBSD/usr.bin/finger/
+21:04 < mulander> man: https://man.openbsd.org/finger
+21:04 < mulander> The finger utility displays information about local and remote system users. 
+21:05 < mulander> the manpage contains details on what's displayed
+21:05 < mulander> but let's look at the code
+21:05 < mulander> first a general *guess* of what each file does
+21:05 < mulander> extern.h - forward defines?
+21:05 < mulander> finger.1 - man page
+21:05 < mulander> finger.[ch] - main program
+21:06 < mulander> lprint.c - foramtting print for the info obtained?
+21:06 < mulander> Makfile - build file
+21:06 < mulander> net.c - for obtaining info on remote users
+21:07 < mulander> sprint.c - same as lprint? look at the file says shortened
+21:07 < mulander> and l probably stands for long
+21:07 < mulander> util.c - helper code
+21:07 < mulander> let's jump to main
+21:14 < mulander> sec, phone
+21:18 < mulander> ok back, sorry for the wait
+21:19 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/finger.c
+21:19 < mulander> a bunch of includes, not separated as style(9) suggests
+21:20 < mulander> some global variables and main
+21:20 < mulander> we see a standard getopt handler
+21:23 < mulander> next if we have a domain name set we inc the mflag
+21:24 < mulander> same if /etc/pwd.db is larger than 1MB
+21:24 < mulander> we do our first pledge
+21:24 < mulander> 129    if (pledge("stdio rpath getpw dns inet", NULL) == -1)
+21:27 < mulander> next we branch depending on how the call was made
+21:27 < mulander> if we just had finger and some flags
+21:27 < mulander> we imply the short format
+21:27 < mulander> unless the -l flag was passed
+21:28 < mulander> sample call of just `finger`
+21:28 < mulander> $ finger
+21:28 < mulander> Login    Name                 Tty  Idle  Login Time   Office     Office Phone
+21:28 < mulander> mulander Adam Wolk             p0     -     Wed 13:38 
+21:28 < mulander> in case a username was passed we default for the long option
+21:30 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:30 < mulander> $ finger mulander
+21:30 < mulander> Login: mulander                         Name: Adam Wolk
+21:30 < mulander> Directory: /home/mulander               Shell: /bin/ksh
+21:30 < mulander> On since Wed Jul 12 13:38 (CEST) on ttyp0 from 46.148.157.96
+21:30 < mulander> New mail received Wed Jul 12 19:56 2017 (CEST)
+21:30 < mulander>      Unread since Wed Jul 12 02:15 2017 (CEST)
+21:30 < mulander> No Plan.
+21:31 < mulander> it can be forced to short format if -s is passed
+21:31 < mulander> so we now know what sprint and lprint do
+21:31 < mulander> they handle those formats being outputed
+21:32 < mulander> now depending on the path we either call loginlist or userlist
+21:32 < mulander> lets start with loginlist
+21:32 < mulander> it can do an additional pledge
+21:32 < mulander> 139        if (pledge("stdio rpath getpw", NULL) == -1)
+21:32 < mulander> 140            err(1, "pledge");
+21:32 < mulander> so we drop dns and inet from the pledge
+21:35 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/finger.c#loginlist
+21:35 < mulander> we see we work with a PERSON
+21:35 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/finger.h#63
+21:35 < mulander> 44/*
+21:35 < mulander> 45 * All unique persons are linked in a list headed by "head" and linkd
+21:35 < mulander> 46 * by the "next" field, as well as kept in a hash table.
+21:35 < mulander> 47 */
+21:46 < mulander> back again, bad day for reads
+21:49 < mulander> we open utmp for reading (/var/run/utmp)
+21:49 < mulander> we saw that file used before in our w/uptime read
+21:51 < mulander> so that's interesting
+21:51 < mulander> if (!freopen(_PATH_UTMP, "r", stdin))
+21:51 < mulander> the file is reopened as stdin
+21:55 < mulander> we read entries into our user struct
+21:55 < mulander> as in utmp struct
+21:56 < mulander> call find_person on each
+21:56 < mulander> from our util.c
+21:56 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/util.c#275
+21:56 < mulander> that does a lookup in the hashtable finger keeps
+21:56 < mulander> if the person was not present we add it via 
+21:56 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/util.c#248
+22:01 < mulander> after we have our person
+22:01 < mulander> we call enter_Where
+22:01 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/util.c#234
+22:03 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/finger.h#75 WHERE is another struct
+22:03 < mulander> so this seems to store the tty and related info of the user
+22:04 < mulander> and his idle + last login time
+22:04 < mulander> it ends up calling http://bxr.su/OpenBSD/usr.bin/finger/util.c#find_idle_and_ttywrite
+22:04 < mulander> I love this comment
+22:04 < mulander> 64        /* Don't bitch about it, just handle it... */
+22:06 < mulander> in stat(2)
+22:06 < mulander> Upon successful completion, the value 0 is returned; otherwise the value -1 is returned and the global variable errno is set to indicate the error.
+22:06 < mulander> so if stat errors out
+22:07 < mulander> we assume it's not idle and not writeable
+22:08 -!- trondd is now known as TronDD-w
+22:11 < mulander> we then dive into lastlog
+22:11 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/util.c#186
+22:11 < mulander> we try to open /var/log/lastlog
+22:13 < mulander> to obtain information on last login time for each found user
+22:13 < mulander> after that we either hit sprint or lprint
+22:13 < mulander> depending on the flags passed
+22:14 < mulander> worth to note that ie. in case of just `finger` without -l we won't enter lastlog
+22:15 < mulander> let's stop here and handle both printout formats plus the long format tomorrow
+22:15 < mulander> --- DONE ---

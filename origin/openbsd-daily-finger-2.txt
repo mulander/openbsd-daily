@@ -1,0 +1,117 @@
+21:18 [Users #openbsd-daily]
+21:18 [ __gilles      ] [ def            ] [ fireglow      ] [ kraucrow  ] [ philosaur ] [ t_b          ] 
+21:18 [ abecker       ] [ desnudopenguino] [ freakazoid0223] [ landers2  ] [ phy1729   ] [ tarug0       ] 
+21:18 [ akfaew        ] [ Dhole          ] [ FRIGN         ] [ lteo[m]   ] [ polishdub ] [ tdmackey_    ] 
+21:18 [ akkartik      ] [ dial_up        ] [ g0relike      ] [ lucias    ] [ pstef     ] [ Technaton    ] 
+21:18 [ antoon_i      ] [ dlg            ] [ geetam        ] [ mandarg   ] [ qbit      ] [ thrym        ] 
+21:18 [ antranigv     ] [ dmfr           ] [ ghostyyy      ] [ mattl     ] [ raf1      ] [ timclassic   ] 
+21:18 [ apelsin       ] [ dostoyevsky    ] [ Guest13989    ] [ metadave  ] [ rain1     ] [ tmc          ] 
+21:18 [ apotheon      ] [ DuClare        ] [ gurwall_      ] [ mikeb     ] [ rgouveia  ] [ toddf        ] 
+21:18 [ azend|vps     ] [ duncaen        ] [ Harry         ] [ mulander  ] [ rnelson   ] [ toorop       ] 
+21:18 [ bcallah       ] [ dxtr           ] [ holsta        ] [ Naabed-   ] [ rwrc      ] [ TuxOtaku     ] 
+21:18 [ bcd           ] [ dzho           ] [ ija           ] [ nacci     ] [ ryan      ] [ vbarros      ] 
+21:18 [ bch           ] [ eau            ] [ jaypatelani   ] [ nacelle   ] [ S007      ] [ VoidWhisperer] 
+21:18 [ biniar        ] [ ebag           ] [ jbernard      ] [ nailyk    ] [ salva0    ] [ vyvup        ] 
+21:18 [ brianpc       ] [ emigrant       ] [ job           ] [ nand1     ] [ sam_c     ] [ weezelding   ] 
+21:18 [ brtln         ] [ entelechy      ] [ jrmu          ] [ Niamkik   ] [ Schoentoon] [ wilornel     ] 
+21:18 [ bruflu        ] [ epony          ] [ jsing         ] [ nnplv     ] [ skizye    ] [ wuzzah       ] 
+21:18 [ brynet        ] [ erethon        ] [ jwit          ] [ nopacienc3] [ skrzyp    ] [ xor29ah      ] 
+21:18 [ cedriczirtacic] [ fcambus        ] [ kAworu        ] [ oldlaptop ] [ smiles`   ] [ zelest       ] 
+21:18 [ cengizIO      ] [ fdiskyou       ] [ kl3           ] [ owa       ] [ Soft      ] 
+21:18 [ corsah        ] [ filwisher      ] [ kpcyrd        ] [ petrus_lt ] [ stateless ] 
+21:18 -!- Irssi: #openbsd-daily: Total of 118 nicks [0 ops, 0 halfops, 0 voices, 118 normal]
+21:19 < mulander> --- code read: /usr/bin/finger continued ---
+21:19 < mulander> *** continue the general read while we wait on response for dhcpd ***
+21:26 < mulander> ok so we stopped at the printout formats
+21:26 < mulander> let's start with short print format
+21:26 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/sprint.c
+21:27 < mulander> $ finger
+21:27 < mulander> Login    Name                 Tty  Idle  Login Time   Office     Office Phone
+21:27 < mulander> mulander Adam Wolk             p0     -     Wed 13:38 
+21:27 < mulander> is the format w will be reading now
+21:29 < mulander> with -h the last part would be replaced (office office phone) with where and showing the ip address
+21:29 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/sprint.c#55 described in a comment here
+21:30 < mulander> next we printf the header
+21:30 < mulander> and loop through the entries
+21:34 < mulander> struct where *whead, *wtail;    /* list of where he is or has been */
+21:34 < mulander> for (w = pn->whead; w != NULL; w = w->next) {
+21:34 < mulander> so we loop through locations of the user
+21:35 < mulander> then proceed to just print the format
+21:35 < mulander> realname
+21:35 < mulander> login, realname
+21:35 < mulander> the tty
+21:35 < mulander> adding * if it's not writable
+21:36 < mulander> if logged in we call out to stimeprint
+21:36 < mulander> we will jump there in a moment
+21:37 < mulander> looking at
+21:37 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:37 < mulander> 102            p = ctime(&w->loginat);
+21:37 < mulander> 103
+21:37 < mulander> 104            if (now - w->loginat < SECSPERDAY * 6)
+21:37 < mulander> 105                (void)printf("   %.3s", p);
+21:37 < mulander> 106            else
+21:37 < mulander> 107                (void)printf("%.6s", p + 4);
+21:37 < mulander> 108            if (now - w->loginat >= SIXMONTHS)
+21:37 < mulander> 109                (void)printf(" %.4s ", p + 20);
+21:37 < mulander> 110            else
+21:37 < mulander> 111                (void)printf(" %.5s", p + 11);
+21:37 < mulander> no doubt this refers to
+21:37 < mulander> 61     *  if logged in show idle time and day logged in, else
+21:37 < mulander> 62     *      show last login date and time.  If > 6 months,
+21:37 < mulander> 63     *      show year instead of time.  If < 6 days,
+21:37 < mulander> 64     *      show day name instead of month & day.
+21:37 < mulander> butu how does it work?
+21:38 < mulander> https://man.openbsd.org/ctime what is ctime()
+21:39 < mulander> The ctime() function converts a time_t, pointed to by clock, representing the time in seconds since 00:00:00 UTC, 1970-01-01, and returns a pointer to a string of the form
+21:39 < mulander> Thu Nov 24 18:22:48 1986\n
+21:39 < mulander> Years requiring fewer than four characters are padded with leading zeroes. For years longer than four characters, the string is of the form
+21:39 < mulander> Thu Nov 24 18:22:48     81986\n
+21:39 < mulander> so we get the login time as a string
+21:39 < mulander> p points at the beginning of it
+21:39 < mulander> so adding bytes to it will skip that many characters
+21:43 < mulander> huh
+21:43 < mulander> is this a documentation bug/typo? anyone/
+21:43 < mulander> why is there an 8 before 1986 in the second example
+21:43 < mulander> Thu Nov 24 18:22:48     81986\n
+21:43 < mulander> ah
+21:43 < mulander> misread
+21:43 < mulander> for years longer than 4 characters
+21:44 < mulander> I'm actually tempted to get that piece of code
+21:44 < mulander> and run it against both strings from the documentation
+21:44 < mulander> just as a test
+21:44 < mulander> let's do that
+21:50  * mulander clickety clack
+21:51 < mulander> first an example just using the current time
+21:51 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:51 < mulander> $ ./ctime                                                                                                                                                                                                                         
+21:51 < mulander> Thu Jul 13 21:51:35 2017
+21:51 < mulander>    Thu
+21:51 < mulander> Jul 13
+21:51 < mulander>  2017 
+21:51 < mulander>  21:51
+21:52 < mulander> https://junk.tintagel.pl/ctime.c
+21:53 < mulander> so the first print handles showing the day
+21:53 < mulander> the second one skips the day (3 characters and prints 6 chars which is month + day including the separator
+21:54 < mulander> then we skip 28 chars and land on the year printing 4 characters
+21:55 < mulander> and the final example skips 11 chars landing on the hour and printing 5 chars - so hh:mm
+21:56 < mulander> now back to the man page
+21:56 < mulander>  and returns a pointer to a string of the form
+21:56 < mulander> Thu Nov 24 18:22:48 1986\n
+21:56 < mulander> thats fine
+21:56 < mulander> Years requiring fewer than four characters are padded with leading zeroes. For years longer than four characters, the string is of the form
+21:56 < mulander> Thu Nov 24 18:22:48     81986\n
+21:56 < mulander> so in the year 81986 finger would lie that the user logged in on year 8198 as it only outputs 8 characters
+21:57 < mulander> but what's with the extra whitespace before the year?
+21:57 < mulander> that would also break this code
+21:57 < mulander> Thu Nov 24 18:22:48     81986\n
+21:57 < mulander> with five spaces before the year. These unusual formats are designed to make it less likely that older software that expects exactly 26 bytes of output will mistakenly output misleading values for out-of-range years.
+21:58 < mulander> well the man page anticipates finger working incorrectly
+21:58 < mulander> :D
+21:59 < mulander> I anticipate a new y2k in 9999 + 1
+21:59 < mulander> ok that covers the interesting parts of sprint
+21:59 < mulander> stimeprint is much more boring
+22:00 < mulander> just output depending on the struct values
+22:02 < mulander> let's end here for today
+22:03 < mulander> tomorrow we will pick up dhcpd if we get a reply on tech@ - if not I'm open to suggestions (continue with finger, take something else)
+22:03 < mulander> leave your suggestions on the channel highlighting me or send them of to my mail
+22:03 < mulander> --- DONE ---

@@ -1,0 +1,89 @@
+00:05 [Users #openbsd-daily]
+00:05 [ __gilles      ] [ def            ] [ fireglow      ] [ lucias    ] [ phy1729   ] [ tarug0       ] 
+00:05 [ abecker       ] [ desnudopenguino] [ freakazoid0223] [ mandarg   ] [ polishdub ] [ tdmackey_    ] 
+00:05 [ akfaew        ] [ Dhole          ] [ g0relike      ] [ mattl     ] [ pstef     ] [ Technaton    ] 
+00:05 [ akkartik      ] [ dial_up        ] [ geetam        ] [ metadave  ] [ qbit      ] [ thrym        ] 
+00:05 [ antoon_i      ] [ dlg            ] [ ghostyyy      ] [ metavoid  ] [ raf1      ] [ timclassic   ] 
+00:05 [ antranigv     ] [ dmfr           ] [ Guest13989    ] [ mikeb     ] [ rgouveia  ] [ tmc          ] 
+00:05 [ apelsin       ] [ dostoyevsky    ] [ Harry         ] [ mulander  ] [ rnelson   ] [ toddf        ] 
+00:05 [ apotheon      ] [ DuClare        ] [ holsta        ] [ Naabed-   ] [ rwrc      ] [ toorop       ] 
+00:05 [ azend|vps     ] [ duncaen        ] [ ija           ] [ nacci     ] [ ryan      ] [ TuxOtaku     ] 
+00:05 [ bcallah       ] [ dxtr           ] [ jbernard      ] [ nacelle   ] [ S007      ] [ vbarros      ] 
+00:05 [ bcd           ] [ dzho           ] [ job           ] [ nailyk    ] [ salva0    ] [ VoidWhisperer] 
+00:05 [ bch           ] [ eau            ] [ jrmu          ] [ nand1     ] [ sam_c     ] [ vyvup        ] 
+00:05 [ biniar        ] [ ebag           ] [ jsing         ] [ Niamkik   ] [ Schoentoon] [ weezelding   ] 
+00:05 [ brianpc       ] [ emigrant       ] [ jwit          ] [ njt       ] [ skizye    ] [ wilornel     ] 
+00:05 [ brtln         ] [ entelechy      ] [ kAworu        ] [ nnplv     ] [ skrzyp    ] [ wuzzah       ] 
+00:05 [ bruflu        ] [ epony          ] [ kl3           ] [ nopacienc3] [ smiles`   ] [ xor29ah      ] 
+00:05 [ brynet        ] [ erethon        ] [ kpcyrd        ] [ oldlaptop ] [ Soft      ] [ zelest       ] 
+00:05 [ cedriczirtacic] [ fcambus        ] [ kraucrow      ] [ owa       ] [ stateless ] 
+00:05 [ cengizIO      ] [ fdiskyou       ] [ landers2      ] [ petrus_lt ] [ swankier  ] 
+00:05 [ corsah        ] [ filwisher      ] [ lteo[m]       ] [ philosaur ] [ t_b       ] 
+00:05 -!- Irssi: #openbsd-daily: Total of 117 nicks [0 ops, 0 halfops, 0 voices, 117 normal]
+00:10 < mulander> --- code read: finish up finger ---
+00:10 < mulander> *** goal: quick finish up of the finger read ***
+00:12 < mulander> we did the short status read yesterday, let's read the lprint http://bxr.su/OpenBSD/usr.bin/finger/lprint.c
+00:12 < mulander> first up some defines and lflag_print
+00:14 < mulander> we itrate over our list
+00:14 < mulander> and start of calling show_text to handle plan and project file processing
+00:15 < mulander> before that we call lprint for each record
+00:15 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/lprint.c#72
+00:15 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+00:15 < mulander> 82    /*
+00:15 < mulander> 83     * long format --
+00:15 < mulander> 84     *  login name
+00:15 < mulander> 85     *  real name
+00:15 < mulander> 86     *  home directory
+00:15 < mulander> 87     *  shell
+00:15 < mulander> 88     *  office, office phone, home phone if available
+00:15 < mulander> 89     *  mail status
+00:15 < mulander> 90     */
+00:16 < mulander> pretty basic output and handling wrapping
+00:16 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+00:16 < mulander> 128    /*
+00:16 < mulander> 129     * long format con't:
+00:16 < mulander> 130     * if logged in
+00:16 < mulander> 131     *  terminal
+00:16 < mulander> 132     *  idle time
+00:16 < mulander> 133     *  if messages allowed
+00:16 < mulander> 134     *  where logged in from
+00:16 < mulander> 135     * if not logged in
+00:16 < mulander> 136     *  when last logged in
+00:16 < mulander> 137     */
+00:17 < mulander> for each user we then iterate over the WHERE struct
+00:18 < mulander> which contains all the locations we know the user  visited from or is connected from now
+00:18 < mulander> for logged in users
+00:19 < mulander> we print the login time
+00:19 < mulander> then handle idle time
+00:19 < mulander> 151            /*
+00:19 < mulander> 152             * idle time is tough; if have one, print a comma,
+00:19 < mulander> 153             * then spaces to pad out the device name, then the
+00:19 < mulander> 154             * idle time.  Follow with a comma if a remote login.
+00:19 < mulander> 155             */
+00:20 < mulander> similar for last log, just more conditional printing
+00:20 < mulander> next we print times of last mail handled
+00:21 < mulander> we called something named demi_print along the way
+00:21 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/lprint.c#219
+00:21 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+00:21 < mulander> 226        /*
+00:21 < mulander> 227         * We left off on an odd number of fields.  If we haven't
+00:21 < mulander> 228         * crossed the midpoint of the screen, and we have room for
+00:21 < mulander> 229         * the next field, print it on the same line; otherwise,
+00:21 < mulander> 230         * print it on a new line.
+00:21 < mulander> 231         *
+00:21 < mulander> 232         * Note: we insist on having the right hand fields start
+00:21 < mulander> 233         * no less than 5 tabs out.
+00:21 < mulander> 234         */
+00:22 < mulander> again just conditional printin
+00:22 < mulander> show text is even easier
+00:22 < mulander> http://bxr.su/OpenBSD/usr.bin/finger/lprint.c#257
+00:23 < mulander> dumps the header, then opens the file for reading and prints its content to the screen
+00:23 < mulander> in our case a .plan and .project files from the user home
+00:24 < mulander> vputc is interesting http://bxr.su/OpenBSD/usr.bin/finger/lprint.c#276
+00:25 < mulander> it calls vis https://man.openbsd.org/man3/vis.3
+00:25 < mulander> Only encode "unsafe" characters. These are control characters which may cause common terminals to perform unexpected functions. Currently this form allows space, tab, newline, backspace, bell, and return -- in addition to all graphic characters -- unencoded.
+00:26 < mulander> There is one additional flag, VIS_NOSLASH, which inhibits the doubling of backslashes and the backslash before the default format (that is, control characters are represented by '^C' and meta characters as 'M-C'). With this flag set, the encoding is ambiguous and non-invertible.
+00:26 < mulander> so this tries to prevent users breaking each other terminals or attempting to exploit it
+00:26 < mulander> by having garbage in their .plan or .project files and waiting for someone to finger them
+00:29 < mulander> let's call it a day on this note
+00:29 < mulander> --- DONE ---

@@ -1,0 +1,123 @@
+21:01 [Users #openbsd-daily]
+21:01 [@dlg      ] [ corsah         ] [ fireglow      ] [ kl3     ] [ nopacienc3] [ Soft         ] 
+21:01 [ __gilles ] [ def            ] [ flopper       ] [ kpcyrd  ] [ oldlaptop ] [ stateless    ] 
+21:01 [ abecker  ] [ desnudopenguino] [ freakazoid0223] [ kraucrow] [ owa       ] [ t_b          ] 
+21:01 [ acidfoo-_] [ Dhole          ] [ FRIGN         ] [ kremlin ] [ petrus_lt ] [ tarug0       ] 
+21:01 [ akfaew   ] [ dial_up        ] [ g0relike      ] [ kysse   ] [ philosaur ] [ tdmackey_    ] 
+21:01 [ akkartik ] [ dmfr           ] [ geetam        ] [ landers2] [ phy1729   ] [ Technaton    ] 
+21:01 [ antoon_i ] [ dostoyevsky    ] [ ghostyyy      ] [ lteo[m] ] [ polishdub ] [ thrym        ] 
+21:01 [ antranigv] [ DuClare        ] [ Guest13989    ] [ lucias  ] [ pstef     ] [ timclassic   ] 
+21:01 [ apelsin  ] [ duncaen        ] [ harrellc00per ] [ mandarg ] [ qbit      ] [ toddf        ] 
+21:01 [ apotheon ] [ dxtr           ] [ Harry         ] [ mattl   ] [ raf1      ] [ toorop       ] 
+21:01 [ azend|vps] [ dzho           ] [ holsta        ] [ metadave] [ rgouveia  ] [ TuxOtaku     ] 
+21:01 [ bcallah  ] [ eau            ] [ ija           ] [ mikeb   ] [ rnelson   ] [ vbarros      ] 
+21:01 [ bcd      ] [ ebag           ] [ jaypatelani   ] [ mulander] [ rwrc      ] [ VoidWhisperer] 
+21:01 [ bch      ] [ emigrant       ] [ jbernard      ] [ Naabed- ] [ ryan      ] [ vyvup        ] 
+21:01 [ biniar   ] [ entelechy      ] [ job           ] [ nacci   ] [ S007      ] [ weezelding   ] 
+21:01 [ brianpc  ] [ epony          ] [ jrmu          ] [ nacelle ] [ salva0    ] [ wilornel     ] 
+21:01 [ brtln    ] [ erethon        ] [ jsing         ] [ nailyk  ] [ sam_c     ] [ xor29ah      ] 
+21:01 [ bruflu   ] [ fcambus        ] [ jwit          ] [ nand1   ] [ Schoentoon] [ zelest       ] 
+21:01 [ brynet   ] [ fdiskyou       ] [ kAworu        ] [ Niamkik ] [ skrzyp    ] 
+21:01 [ cengizIO ] [ filwisher      ] [ kittens       ] [ nnplv   ] [ smiles`   ] 
+21:01 -!- Irssi: #openbsd-daily: Total of 118 nicks [1 ops, 0 halfops, 0 voices, 117 normal]
+21:01 < mulander> --- code read: dhcpd reaping children ---
+21:01 < mulander> *** goal: fix dhcpd leaving it's child running after it is long dead ***
+21:02 < mulander> we managed to reproduce the issue yesterday
+21:02 < mulander> and reproduced it also on a fresh checkout of the source code
+21:04 < mulander> brynet also pointed out that the code is a bit too happy to warn when things go terribly wrong instead of bailing out
+21:06 < mulander> http://bxr.su/s?refs=pftable_handler&project=OpenBSD
+21:06 < mulander> I personally think at least those warnings should be fatal:
+21:07 < mulander>  log_warn("can't open pf device"); - child can do no work when not able to access pf
+21:07 < mulander> log_warn("chroot %s", _PATH_VAREMPTY); - we can't chroot, that's not a nice thing to ignore
+21:07 < mulander>   log_warn("chdir(\"/\")"); - can't change our path into the chroot
+21:07 < mulander>   log_warn("can't drop privileges"); - can't drop privileges
+21:07 < mulander> log_warnx("pf pipe closed"); - our pipe was closed by the parent
+21:08 < mulander> ah wrong that's not the parent
+21:08 < mulander> but still
+21:09 < mulander> ah it is
+21:09 < mulander> nvm :)
+21:09 < mulander> so in those cases at least the child should exit
+21:09 < mulander> the parent calls fatal when quiting
+21:10 < mulander> http://bxr.su/OpenBSD/usr.sbin/dhcpd/log.c#180
+21:10 < mulander> so log the message and exit 1
+21:11 < mulander> since we can reproduce the code out of a fresh checkout
+21:11 < mulander> let's change those warnings to fatals
+21:13 < mulander> oh one more
+21:14 < mulander> if we take a look at our /var/log/messages
+21:14 -!- Irssi: Pasting 11 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe closed
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe closed
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe closed
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe closed
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe closed
+21:14 < mulander> Jul 11 21:04:06 tintagel dhcpd[62506]: pf pipe error: Broken pipe
+21:14 < mulander> spammed all over
+21:14 < mulander> from those warnings
+21:15 < mulander> the pipe error comes from atomicio which also sets the errno
+21:15 < mulander> 83            if (r != l)
+21:15 < mulander> 84                log_warn("pf pipe error");
+21:15 < mulander> don't think we need to change this one as if this happens we will fatal out on the pipe closed
+21:17 < mulander> our proposed diff
+21:17 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:17 < mulander> # ./dhcpd -A test ; pgrep -lf dhcpd
+21:17 < mulander> Listening on vio0 (45.63.9.186).
+21:17 < mulander> 15610 dhcpd: pf table handler
+21:17 < mulander> 40083 ./dhcpd -A test
+21:17 < mulander> # pgrep -lf dhcpd                   
+21:17 < mulander> 15610 dhcpd: pf table handler
+21:17 < mulander> 40083 ./dhcpd -A test
+21:17 < mulander> # kill 40083
+21:17 < mulander> # pgrep -lf dhcpd 
+21:17 < mulander> when re-tested
+21:18 < mulander> and from our messages
+21:18 < mulander> Jul 11 21:16:54 tintagel dhcpd[15610]: fatal in dhcpd: pf pipe closed
+21:20 < mulander> and our diff: https://junk.tintagel.pl/dhcpd-pf-handler.diff
+21:21 < mulander> waiting a bit for any feedback on it
+21:22 < brynet> o/ hi
+21:22 < brynet> I suspect this is probably good enough to stop the child from spamming logs, someone else might try to clean up some other issues..
+21:23 < brynet> for example, calling _exit(2) instead of exit(3). There's also the case where the pf handler child fails early and the parent is still around, does the tables feature just silently not work?
+21:25 < mulander> it would not work until now
+21:25 < brynet> pfmsg, the functioned used for ipc between the parent/child, has a comment implying that it will simply return.
+21:25 < mulander> ie. when it fails to open /dev/pf
+21:26 < brynet> right now it would probably just fill the logs, which might be a good indication something was iffy :)
+21:26 < brynet> heh
+21:27 < mulander> well it does it based on gotpipe
+21:27 < mulander> 232    if (gotpipe == 0)
+21:27 < mulander> 233        return;
+21:27 < mulander> that's only set in parent after forking
+21:28 < mulander> there's no handling for properly closing it down
+21:28 < mulander> so I assume pfmsg would try to send messages to a dead child.
+21:28 < mulander> it ignores any errors on the vwrite
+21:28 < mulander> so it would be a no-op but it would try to write to a closed fd
+21:30 < mulander> brynet: don't think we can decide much more without going to tech@ - should the child signal the parent to die?
+21:30 < brynet> perhaps
+21:30 < mulander> hm
+21:31 < mulander> is it possible to open a disabled pf?
+21:31 < mulander> ie. what would happen if I would disable pf
+21:31 < brynet> I suspect it succeed, if only to allow enabling it.
+21:32 < mulander> so it would open it, and call ioctls on it and log warnings
+21:34 < mulander> ok, I will wrap what we have and will describe the whole thing in an email to tech@
+21:34 < brynet> sounds good
+21:34 < mulander> brynet: one question
+21:34 < mulander> can you elaborate on the use of _exit(2) vs exit(3) from cild?
+21:34 < mulander> *child
+21:35 < mulander> that's so the parent gets a signal that the child decided to suicide?
+21:35 < brynet> The manual pages actually good a job describing this, but exit(3) does additional things like flushing streams, caling atexit, etc. It's safer to call _exit(2) after fork(2) in the child.
+21:36 < mulander> https://man.openbsd.org/_exit.2
+21:36 < brynet> from fork(2:
+21:36 < brynet>    In general, the child process should call _exit(2) rather than exit(3).
+21:37 < brynet>    Otherwise, any stdio buffers that exist both in the parent and child will
+21:37 < brynet>     be flushed twice.  Similarly, _exit(2) should be used to prevent
+21:37 < brynet>    atexit(3) routines from being called twice (once in the parent and once
+21:37 < brynet>    in the child).
+21:38 < brynet> That might make the fatal wrapper unsuitable, but the code is already using exit(3) in the child, although never reached.
+21:38 < mulander> yeah
+21:39 < mulander> I will note that in the tech@ mail, seems there is no point just comitting this change
+21:39 < mulander> withotu agreeing on a proper change for this
+21:41 < mulander> ok wrapping up, email to tech@ tomorrow during the day, we will do a different read tomorrow and will get back to this topic after a consensus is reached
+21:41 < mulander> --- DONE ---
