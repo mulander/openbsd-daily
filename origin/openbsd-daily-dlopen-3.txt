@@ -1,0 +1,234 @@
+20:59 [Users #openbsd-daily]
+20:59 [ __gilles ] [ Dhole      ] [ FRIGN     ] [ leah2     ] [ phy1729   ] [ tmc          ] 
+20:59 [ abecker  ] [ dial_up    ] [ g0relike  ] [ lteo[m]   ] [ polishdub ] [ toddf        ] 
+20:59 [ akfaew   ] [ dlg        ] [ geetam    ] [ lucias    ] [ protoCall7] [ toorop       ] 
+20:59 [ akkartik ] [ dmfr       ] [ ghostyy   ] [ mandarg   ] [ qbit      ] [ TronDD-w     ] 
+20:59 [ antoon_i ] [ dostoyevsky] [ gk_       ] [ mattl     ] [ raf1      ] [ turlando     ] 
+20:59 [ antranigv] [ DuClare    ] [ Guest54057] [ metadave  ] [ rnelson   ] [ TuxOtaku     ] 
+20:59 [ apotheon ] [ duncaen    ] [ gurwall   ] [ metavoid  ] [ rwrc      ] [ vbarros      ] 
+20:59 [ azend|vps] [ dxtr       ] [ jbernard  ] [ mikeb     ] [ ryan      ] [ vmlinuz      ] 
+20:59 [ bcallah  ] [ early      ] [ job       ] [ mulander  ] [ S007      ] [ VoidWhisperer] 
+20:59 [ bcd      ] [ eau        ] [ johnny-o  ] [ Naabed-   ] [ sam_c     ] [ vyvup        ] 
+20:59 [ bch      ] [ ebag_      ] [ jrmu      ] [ nailyk    ] [ Schoentoon] [ weezelding   ] 
+20:59 [ biniar   ] [ emigrant   ] [ jsing     ] [ nand1     ] [ sgnorptz_ ] [ wilornel     ] 
+20:59 [ blob     ] [ entelechy  ] [ jwit      ] [ Niamkik   ] [ sigjuice  ] [ wuzzah       ] 
+20:59 [ brianpc_ ] [ epony      ] [ jwp873    ] [ nielsk    ] [ skrzyp    ] [ zelest       ] 
+20:59 [ brtln    ] [ erethon    ] [ kAworu    ] [ njt       ] [ stateless ] [ zerous       ] 
+20:59 [ bruflu   ] [ fcambus    ] [ KIsmay    ] [ nopacienc3] [ tarug0    ] 
+20:59 [ brynet   ] [ fdiskyou   ] [ kl3       ] [ oldlaptop ] [ tdmackey  ] 
+20:59 [ cengizIO ] [ filwisher  ] [ kraucrow  ] [ owa       ] [ Technaton ] 
+20:59 [ colonelK ] [ fireglow   ] [ kysse     ] [ petrus_lt ] [ thrym     ] 
+20:59 [ corsah   ] [ flopper    ] [ landers2  ] [ philosaur ] [ timclassic] 
+20:59 -!- Irssi: #openbsd-daily: Total of 115 nicks [0 ops, 0 halfops, 0 voices, 115 normal]
+21:00 < mulander> --- code read: dlopen - loading ---
+21:00 < mulander> *** goal: continue where we left out, on actually trying to load a shared library ***
+21:00 < mulander> previous reads:
+21:00 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-1.txt
+21:00 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-2.txt
+21:00 < mulander> usual handy links
+21:00 < mulander> man page: https://man.openbsd.org/dlopen
+21:00 < mulander> header file: http://bxr.su/OpenBSD/include/dlfcn.h
+21:01 < mulander> call stack of where we left off
+21:01 < mulander> 1) http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#83
+21:01 < mulander> 2) http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#421
+21:01 < mulander> 3) http://bxr.su/OpenBSD/libexec/ld.so/library.c#95
+21:02 < mulander> 1. is the top-level dlopen
+21:02 < mulander> 2. is the _dl_load_shlib fn which searches through paths to locate the shared library
+21:02 < mulander> we covered it on our second read
+21:02 < mulander> reminder that the function comment is a really nice summary of what it does
+21:03 < mulander> 3. is the code responsible for actually loading the shared library and we left off here
+21:03 < mulander> what else might come in handy is the wiki page on the format
+21:03 < mulander> https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+21:04 < mulander> and the structure itself
+21:04 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/resolve.h#53
+21:05 < mulander> let's start with the function
+21:06 < mulander> it returns a pointer to an elf_object_t which we know holds the loaded shared library (from the resolve.h comment)
+21:06 < mulander> we start off with some local variables and defining two macros
+21:06 < mulander> ROUND_PG and TRUNC_PG
+21:07 < mulander> they handle memory page alignement
+21:08 < mulander> the size is determined in _dl_boot
+21:08 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/loader.c#402
+21:08 < mulander> so I assume it's architecture defined in dl_data
+21:09 < mulander> and if not present we default to 4096 bytes
+21:09 < mulander> next thing is a call to dlopen
+21:09 < mulander> but not the one we went through before
+21:09 < mulander> libfile = _dl_open(libname, O_RDONLY | O_CLOEXEC);
+21:10 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/hppa/ldasm.S#209 there is a syscall defined for hppa
+21:11 < mulander> let's find what other architectures end up doing like amd64
+21:13 < mulander> I can only see sparc and hppa defining something for it
+21:13 < mulander> but the symbol is declared for other platforms
+21:17 < mulander> I'm going to play around with nm
+21:17 < mulander> and try to find where _dl_open points to
+21:19 < mulander> that was a dead end
+21:19 < mulander> (I was examining /usr/libexec/ld.so)
+21:21 < mulander> so what I did now
+21:21 < mulander> $ objdump -d ld.so  | less
+21:22 < mulander> and searching for _dl_open
+21:22 < mulander> which shows to what _dl_open boils down to on amd64
+21:22 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:22 < mulander> 000000000000030c <_dl_open>:
+21:22 < mulander>      30c:       b8 05 00 00 00          mov    $0x5,%eax
+21:22 < mulander>      311:       49 89 ca                mov    %rcx,%r10
+21:22 < mulander>      314:       0f 05                   syscall 
+21:22 < mulander>      316:       0f 82 71 01 00 00       jb     48d <_dl_thrkill+0xd>
+21:22 < mulander>      31c:       c3                      retq   
+21:22 < mulander>      31d:       eb 01                   jmp    320 <_dl_fstat>
+21:22 < mulander>      31f:       cc                      int3   
+21:23 < mulander> (remember the rules kids, if I'm wrong correct me!)
+21:23 < mulander> so it boils down to a syscall for the handling itself
+21:24 < mulander> http://bxr.su/OpenBSD/sys/sys/syscall.h#25
+21:26 < mulander> I do wonder however where is that defined?
+21:26 < mulander> and now I think I see it.
+21:26 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/amd64/ldasm.S#84
+21:27 < mulander> 84DL_SYSCALL(open)
+21:27 < mulander> the dl_syscall2 macro defines a function based on the name
+21:27 < mulander> appends _dl_  to what is passed
+21:27 < mulander> so DL_SYSCALL(open) ends up defining _dl_open
+21:27 < mulander> hence why I wasn't able to grep for where it was introduced
+21:29 < mulander> ok so we open libname
+21:29 < mulander> as readonly CLOEXEC
+21:29 < mulander>            O_CLOEXEC    Set FD_CLOEXEC (the close-on-exec flag) on the new
+21:29 < mulander>                         file descriptor.
+21:32 < mulander> if open fails, we set the DL_CANT_OPEN error and bail out
+21:32 < mulander> if not we proceed
+21:32 < mulander> calling _dl_fstat
+21:33 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/amd64/ldasm.S#85
+21:33 < mulander> again just a syscall
+21:34 < mulander> we know we can look those up with man 2 name
+21:34 < mulander> ie man 2 fstat
+21:35 < mulander> again error if stat on the file fails
+21:36 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library.c#124 - next a loop over objects
+21:36 < mulander> it starts by initializing object to _dl_objects
+21:37 < mulander> initially this starts out as a null global variable
+21:37 < mulander> defined in resolve.c
+21:37 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/resolve.c#54
+21:37 < mulander> 50/*
+21:37 < mulander> 51 * Add a new dynamic object to the object list.
+21:37 < mulander> 52 */
+21:37 < mulander> I'm reading through the remaining comments in that function
+21:38 < mulander> I cheated a bit looking for callsites of _dl_add_object
+21:39 < mulander> and a cursory glance shows that it's called after we loaded a shared library
+21:40 < mulander> so this code looks through the memory on all loaded shared library objects
+21:40 < mulander> and if the one we are about to load is already present
+21:40 < mulander> we just return that instead of loading it again
+21:45 < mulander> next we have a call to read
+21:45 < mulander> which reads 4096 bytes of the libfile
+21:46 < mulander> (it just goes into a syscall read(2))
+21:48 < mulander> now those 4096 bytes are cast to an Elf_Ehdr
+21:48 < mulander> which is a macro
+21:48 < mulander> resolving to either Elf64_Ehdr
+21:48 < mulander> or Elf32_Ehdr
+21:48 < mulander> http://bxr.su/OpenBSD/sys/sys/exec_elf.h#706
+21:49 < mulander> the structs are here
+21:49 < mulander> http://bxr.su/OpenBSD/sys/sys/exec_elf.h#141 - 32 bit
+21:49 < mulander> http://bxr.su/OpenBSD/sys/sys/exec_elf.h#158 - 64 bit
+21:49 < mulander> let's compare that to the wikipedia page
+21:50 < mulander> https://en.wikipedia.org/wiki/Executable_and_Linkable_Format#File_header
+21:50 < mulander> we see the same 32/64 bit split
+21:52 < mulander> first slot is the magic numbers identifying the file as Elf format
+21:53 < mulander> hmm, the fields are commented
+21:53 < mulander> and the wiki page matches
+21:53 < mulander> so no point me copying it here field by field
+21:55 < mulander> now wiki states the header is 64 bytes on 64-bit
+21:55 < mulander> but we saw us reading 4096 bytes
+21:55 < mulander> the remaineder is just ignored in this cast
+21:55 < mulander> but reading less is not really any performance gain
+21:55 < mulander> as 4096 most likely aligns with the block size
+21:56 < mulander> back to the cast site
+21:56 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library.c#140
+21:56 < mulander> ehdr is now our struct
+21:57 < mulander> we check all the magic bytes
+21:57 < mulander> huh
+21:57 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library.c#142
+21:57 < mulander> http://bxr.su/OpenBSD/sys/sys/exec_elf.h#119 there is an IS_ELF macro defined
+21:58 < mulander> it does the same check
+21:58 < mulander> withuot ET_DYN and MACHID check
+21:58 < mulander> wonder if worth to do that here
+21:58 < mulander> or at least use the index defines (EI_MAG0)
+21:58 < mulander> might be worth to check what was developed later
+21:59 < mulander> though it's obviously just churn with no functional change if done
+21:59 < mulander> but worth to remember if there is something to change here
+22:01 < mulander> if we don't match the magic bytes
+22:01 < mulander> and are not a dynamic library
+22:01 < mulander> #define ET_DYN      3       /* shared object file */
+22:02 < mulander> and if the .so is for a different architecture (MACHID)
+22:02 < mulander> (swap and with or above)
+22:02 < mulander> we bail out with NOT_ELF
+22:02 < mulander> if not
+22:02 < mulander> 150    /*
+22:02 < mulander> 151     *  Alright, we might have a winner!
+22:02 < mulander> 152     *  Figure out how much VM space we need.
+22:02 < mulander> 153     */
+22:03 < mulander> so e_phnum is the number of program header entries
+22:04 < mulander> we iterate through each one of them
+22:05 < mulander> the first header (phdp) starts at hbuf + the program header offset
+22:05 < mulander> each header has a type
+22:05 < mulander> PT_LOAD - loadable segment
+22:05 < mulander> PT_DYNAMIC - dynammic linking section
+22:06 < mulander> PT_TLS - thread local storage
+22:08 < mulander> for the minimum vm space we take the virtual address of the loadable segment
+22:09 < mulander> for maximum we use the minimum addres plus the number of bytes in memory required for the segment
+22:10 < mulander> for the dynamic segment we store the dynp (address of the dynamic section)
+22:11 < mulander> for thread local storage we do a sanity check and store the location in ptls
+22:11 < mulander> after that we truncate and round the minimum/max memory needed
+22:11 < mulander> and as described
+22:11 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:11 < mulander> 190    /*
+22:11 < mulander> 191     * We map the entire area to see that we can get the VM
+22:11 < mulander> 192     * space required. Map it unaccessible to start with.
+22:11 < mulander> 193     *
+22:11 < mulander> 194     * We must map the file we'll map later otherwise the VM
+22:11 < mulander> 195     * system won't be able to align the mapping properly
+22:11 < mulander> 196     * on VAC architectures.
+22:11 < mulander> 197     */
+22:12 < mulander> there is a call to _dl_map
+22:13 < mulander> *_dl_mmap
+22:14 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/amd64/syscall.h#65
+22:14 < mulander> which is just a syscall to SYS_mmap
+22:14 < mulander> so can be read on man 2 mmap
+22:19 < mulander> ok so we map memory
+22:20 < mulander> bail on error with CANT_MMAP
+22:20 < mulander> and proceed
+22:20 < mulander> we again iterate over each section
+22:21 < mulander> this time we are not just calculating sizes
+22:21 < mulander> but actually loading into memory
+22:21 < mulander> so let's look
+22:21 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library.c#211
+22:24 < mulander> PT_LOAD - loadable segment
+22:25 < mulander> starting here
+22:25 < mulander> for each loadable segment
+22:25 < mulander> we prepare the memory range
+22:25 < mulander> and flags according to what the elf wants (read/write/exec)
+22:26 < mulander> the memory is first
+22:26 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:26 < mulander> 220            /*
+22:26 < mulander> 221             * Initially map W|X segments without X
+22:26 < mulander> 222             * permission.  After we're done with the
+22:26 < mulander> 223             * initial relocation processing, we will make
+22:26 < mulander> 224             * these segments read-only and add back the X
+22:26 < mulander> 225             * permission.  This way we maintain W^X at
+22:26 < mulander> 226             * all times.
+22:26 < mulander> 227             */
+22:27 < mulander> so even if the lib wanted write & execute we will flip off the execute bit
+22:27 < mulander> next if the required memory is non zero we map the memory
+22:27 < mulander> there's an else branch to silence gcc - wonder if still needed
+22:29 < mulander> next we calloc memory for a load_list struct defined in resolve.h
+22:34 < mulander> so next_load is a linked list storing the addresses of each segment we load it seems.
+22:34 < mulander> and their sizes
+22:34 < mulander> if we fail to allocate memory for that segment we bail with CANT_MMAP error and do some cleanup
+22:35 < mulander> next if the memory is writable
+22:35 < mulander> we zero out everything past the EOF
+22:36 < mulander> bump the used memory from our allocation accounting for rounding
+22:36 < mulander> andn so on
+22:36 < mulander> there are also 2 other types of sections
+22:36 < mulander> PT_OPENBSD_RANDOMIZE - 434#define PT_OPENBSD_RANDOMIZE    0x65a3dbe6  /* fill with random data */
+22:37 < mulander> http://bxr.su/OpenBSD/sys/sys/exec_elf.h#434
+22:39 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/util.c#75
+22:40 < mulander> I'm wondering if this is the .openbsd.randomdata ELF section
+22:42 < mulander> and PT_GNU_RELRO
+22:42 < mulander> 'read only after relocation'
+22:43 < mulander> post this we have the file loaded so close it
+22:43 < mulander> and call out to _dl_finalize_object
+22:43 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/resolve.c#250
+22:44 < mulander> and we will leave diving into that one for next friday ^
+22:44 < mulander> --- DONE ---

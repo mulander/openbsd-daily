@@ -55,6 +55,9 @@ You can find original raw IRC logs here:
  * 2017-07-12: https://junk.tintagel.pl/openbsd-daily-finger-1.txt by @mulander
  * 2017-07-13: https://junk.tintagel.pl/openbsd-daily-finger-2.txt by @mulander
  * 2017-07-14: https://junk.tintagel.pl/openbsd-daily-finger-3.txt by @mulander
+ * 2017-07-22: https://junk.tintagel.pl/openbsd-daily-dlopen-1.txt by @mulander
+ * 2017-07-27: https://junk.tintagel.pl/openbsd-daily-dlopen-2.txt by @mulander
+ * 2017-08-04: https://junk.tintagel.pl/openbsd-daily-dlopen-3.txt by @mulander
 
 Copies of these logs are available on this repository in `origin` directory.
 

@@ -1,0 +1,259 @@
+21:10 [Users #openbsd-daily]
+21:10 [ __gilles ] [ desnudopenguino] [ filwisher  ] [ kysse     ] [ philosaur ] [ timclassic   ] 
+21:10 [ abecker  ] [ Dhole          ] [ fireglow   ] [ landers2  ] [ phy1729   ] [ tmc          ] 
+21:10 [ akfaew   ] [ dial_up        ] [ flopper    ] [ lteo[m]   ] [ polishdub ] [ toddf        ] 
+21:10 [ akkartik ] [ dlg            ] [ FRIGN      ] [ lucias    ] [ qbit      ] [ toorop_      ] 
+21:10 [ antoon_i_] [ dmfr           ] [ g0relike   ] [ mandarg   ] [ raf1      ] [ TuxOtaku     ] 
+21:10 [ antranigv] [ dostoyevsky    ] [ geetam     ] [ mattl     ] [ rnelson   ] [ vbarros      ] 
+21:10 [ apotheon ] [ DuClare_       ] [ ghostyy    ] [ metadave  ] [ rwrc      ] [ vmlinuz      ] 
+21:10 [ azend|vps] [ duncaen        ] [ Guest21960 ] [ mikeb     ] [ ryan      ] [ VoidWhisperer] 
+21:10 [ bcallah  ] [ dxtr           ] [ Harry      ] [ mulander  ] [ S007      ] [ weezelding   ] 
+21:10 [ bcd      ] [ dzho           ] [ jaypatelani] [ Naabed-   ] [ sam_c     ] [ Wilawar      ] 
+21:10 [ bch      ] [ early          ] [ jbernard   ] [ nacci_    ] [ Schoentoon] [ wilornel     ] 
+21:10 [ biniar   ] [ eau            ] [ job        ] [ nailyk    ] [ skrzyp    ] [ wuzzah       ] 
+21:10 [ blob     ] [ ebag_          ] [ jrmu       ] [ nand1     ] [ Soft      ] [ xor29ah      ] 
+21:10 [ brianpc_ ] [ emigrant       ] [ jsing      ] [ Niamkik   ] [ stateless ] [ zelest       ] 
+21:10 [ brtln    ] [ entelechy      ] [ jwit       ] [ njt       ] [ t_b       ] [ zerous       ] 
+21:10 [ bruflu_  ] [ epony          ] [ kAworu     ] [ nopacienc3] [ tarug0    ] 
+21:10 [ brynet   ] [ erethon        ] [ kl3        ] [ oldlaptop ] [ tdmackey_ ] 
+21:10 [ cengizIO ] [ fcambus        ] [ kpcyrd     ] [ owa       ] [ Technaton ] 
+21:10 [ corsah   ] [ fdiskyou       ] [ kraucrow   ] [ petrus_lt ] [ thrym     ] 
+21:10 -!- Irssi: #openbsd-daily: Total of 110 nicks [0 ops, 0 halfops, 0 voices, 110 normal]
+21:10 < mulander> --- code read: dlopen - continued ---
+21:11 < mulander> *** goal: finish reading dlopen proper then look at dlctl or DL_LAZY
+21:12 < mulander> usual handy links
+21:12 < mulander> man page: https://man.openbsd.org/dlopen
+21:12 < mulander> header file: http://bxr.su/OpenBSD/include/dlfcn.h
+21:12 < mulander> code when last left off: http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#83
+21:15 < mulander> so we left off with the following comment
+21:16 < mulander> 22:25 < mulander> so I think it would be best to dive deep into the actual loading code in _dl_load_shlib
+21:16 < mulander> 22:26 < mulander> so, let's call it done and pick up next friday continuing from _dl_load_shlib
+21:16 < mulander> we stopped by just reading the comment
+21:16 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#308
+21:16 < mulander> do that now, it describes what the function does
+21:17 < mulander>  *  If the name contains a '/' use only the path preceding the
+21:17 < mulander> 283 *  library name and do not continue on to other methods if not
+21:17 < mulander> 284 *  found.
+21:17 < mulander> 318    if (_dl_strchr(libname, '/')) {
+21:18 < mulander> _dl_strchr http://bxr.su/OpenBSD/libexec/ld.so/util.h#145 is a local to ld.so implementation of strchr
+21:18 < mulander> can be compared to the libc implementation here http://bxr.su/OpenBSD/lib/libc/string/strchr.c#36
+21:19 < mulander> we can see both are the same thing
+21:19 < mulander> this will be a common pattern in ld.so
+21:20 < mulander> libc function names prefixed with _dl_ being a local copy for use by the ld
+21:21 < mulander> so like we saw in the comment, the if branch is picked when the loaded library name contains a '/'
+21:21 < mulander> we make a copy of the library name in lin 321 (http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#321)
+21:21 < mulander> if we fail to make a copy we call _dl_oom()
+21:22 < mulander> which does a bunch of _dl_write with the error message
+21:22 < mulander> and dies
+21:22 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dl_printf.c#261
+21:22 < mulander> using _dl_diedie :)
+21:22 < mulander> which is a macro
+21:22 < mulander> 62#define _dl_diedie()    _dl_thrkill(0, 9, NULL)
+21:25 < mulander> http://bxr.su/search?q=_dl_thrkill&defs=&refs=&path=&project=OpenBSD
+21:25 < mulander> that seems platform dependant
+21:26 < mulander> hppa and sparc seem to define their own in ldasm.S
+21:26 < mulander> while others seem to divert just to the syscall?
+21:26 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/amd64/ldasm.S#104
+21:27 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/amd64/ldasm.S#DL_SYSCALL2
+21:27 < mulander> which eventually calls into asm preparing arguments and executing `syscall` instruction
+21:28 < mulander> back to call site http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#323
+21:29 < mulander> we see strrchr called with '/' passed in
+21:29 < mulander> The strrchr() function locates the last occurrence of the character c in the string s. 
+21:29 < mulander> The strrchr() function returns a pointer to the located character or NULL if the character does not appear in the string.
+21:29 < mulander> https://man.openbsd.org/strrchr
+21:30 < mulander> 324        lname = _dl_strrchr(lpath, '/');
+21:30 < mulander> 325        if (lname == NULL) {
+21:32 < mulander> doing a quick test
+21:37 < mulander> ok I was side tracked for a moment thinking why would we look for '/' again
+21:37 < mulander> since we are sure it is there
+21:37 < mulander> from the check before on line 318
+21:38 < mulander> while strchr returns the first item, it places us at the beginning of the load path
+21:38 < mulander> strrchr would put us as the end (last /) and anything after it would be the library name
+21:39 < mulander> if we don't find any, we free the memory allocated for the copy of libname
+21:39 < mulander> set an errno
+21:39 < mulander> and bail out
+21:39 < mulander> with a null elf object here.
+21:39 < mulander> I saw that pattern before actually
+21:39 < mulander> in htpasswd I think
+21:40 < mulander> this is a string split
+21:40 < mulander> in line 330
+21:40 < mulander> *lname = '\0'
+21:40 < mulander> replaces the last slash with the null byte
+21:40 < mulander> and bumps the pointer lname++ in line 331
+21:42 < mulander> so we start with libname = '/test/lib.so'
+21:42 < mulander> we make a copy of it
+21:42 < mulander> lpath = '/test/lib.so'
+21:42 < mulander> we set lpath to the last /
+21:43 < mulander> lpath = '/lib.so'
+21:43 < mulander> ^ s/lpath/lname/
+21:43 < mulander> now we put \0 on lname
+21:43 < mulander> lpath = '/test\0lib.so'
+21:43 < mulander> lname = '\0lib.so'
+21:43 < mulander> and bump lname++
+21:44 < mulander> lname = 'lib.so'
+21:44 < mulander> lpath and lname actually share the same memory for the whole string
+21:44 < mulander> but
+21:44 < mulander> '/test\0lib.so'
+21:44 < mulander> lp ^ | ^ lname
+21:45 < mulander> back to the code
+21:45 < mulander> if after the move forward
+21:45 < mulander> we get a null byte
+21:45 < mulander> then it means that after the last / we got no library name
+21:45 < mulander> so we again free the memory and jump out with not found
+21:46 < mulander> next we call something named _dl_build_sod
+21:46 < mulander> 338        _dl_build_sod(lname, &sod);
+21:46 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/sod.c#59
+21:46 < mulander> 55/*
+21:46 < mulander> 56 * Populate sod struct for dlopen's call to map_object
+21:46 < mulander> 57 */
+21:47 < mulander> sod stands for
+21:47 < mulander> - /* Shared Object Descriptor */
+21:47 < mulander> http://bxr.su/OpenBSD/include/link.h#42
+21:49 < mulander> so it's a linked list node
+21:49 < mulander> has the minor and major version numebr of the library
+21:50 < mulander> let's see how it's filled
+21:50 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/sod.c#65
+21:50 < mulander> strdup returns a char pointer
+21:51 < mulander> which is cast to a long and stored as sod_name
+21:51 < mulander> we again see a memory allocation check
+21:51 < mulander> terminating with __dl_oom if we failed to allocate
+21:51 < mulander> we next init other fields to 0
+21:53 < mulander> next we check if the first 3 characters of the library start with 'lib'
+21:53 < mulander> if not, we jump to backout
+21:53 < mulander> next we check if it's a filename
+21:54 < mulander> The strchr() function returns a pointer to the located character or NULL if the character does not appear in the string.
+21:54 < mulander> 76    /* is this a filename? */
+21:54 < mulander> 77    if (_dl_strchr((char *)sodp->sod_name, '/'))
+21:54 < mulander> so, if the '/' is present it's not null
+21:54 < mulander> hence a true value in C
+21:54 < mulander> so if it contains a path delimiter it can't be a filename so we jump to backout.
+21:55 < mulander> next we jump over the lib prefix
+21:55 < mulander> 85    /* dot guardian */
+21:55 < mulander> 86    if ((_dl_strchr(cp, '.') == NULL) || (*(cp+_dl_strlen(cp)-1) == '.'))
+21:55 < mulander> 87        goto backout;
+21:56 < mulander> if we don't' have a '.' then we bail out as it's an invalid library name
+21:56 < mulander> same if the name is just a dot '.' (length of string minus 1 is 0)
+21:56 < mulander> next we make sure an .so is present in the name
+21:57 < mulander> and also bail out if we fail to find it
+21:57 < mulander> https://man.openbsd.org/strsep
+21:57 < mulander> the name is then tokenized
+21:57 < mulander> on the dot character
+21:59 < mulander> we then cast the part that stands for the major and minor version number
+21:59 < mulander> to actual ints
+21:59 < mulander> and bail out if we fail to do that
+22:00 < mulander> we then replace the sod_name with the realname (the one with lib prefix skipped)
+22:00 < mulander>  do some cleanup and set the struct fields to the major/minor we parased above
+22:00 < mulander> after that more cleanup and done
+22:01 < mulander> back to call site
+22:01 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#338
+22:01 < mulander> we see a call to _dl_find_shlib
+22:02 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#_dl_find_shlib
+22:03 < mulander> let's try to get over this one more quickly
+22:03 < mulander> 134    /* if we are to search default directories, and hints
+22:03 < mulander> 135     * are not to be used, search the standard path from ldconfig
+22:03 < mulander> 136     * (_dl_hint_search_path) or use the default path
+22:03 < mulander> 137     */
+22:04 < mulander> first pass goes without hints
+22:04 < mulander> 141    if (searchpath == NULL) {
+22:04 < mulander> 142        /* search 'standard' locations, find any match in the hints */
+22:04 < mulander> paths starts with the path we have parsed
+22:05 < mulander> this calls into _dl_findhint
+22:05 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/sod.c#205
+22:07 < mulander> glossing over the code
+22:07 < mulander> apparently there's a hash mapping library names to paths where we should look for them?
+22:07 < mulander> don't want to derail us further so let's get back one step and go forward
+22:08 < mulander> a hint itself is a char*
+22:08 < mulander> and a hint is also what _dl_find_shlib returns
+22:09 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#141
+22:09 < mulander> so we call _dl_findhint for each searchpath (else branch) or the library name itself
+22:10 < mulander> both branches return a hint or fall through to the nohints: label
+22:10 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#164
+22:10 < mulander> 159    /*
+22:10 < mulander> 160     * For each directory in the searchpath, read the directory
+22:10 < mulander> 161     * entries looking for a match to sod. filename compare is
+22:10 < mulander> 162     * done by _dl_match_file()
+22:10 < mulander> 163     */
+22:11 < mulander> 155char                **_dl_hint_search_path = NULL;
+22:11 < mulander> that is a global
+22:11 < mulander> set in the hash maphints function
+22:11 < mulander> I assume it's set by now
+22:11 < mulander>  _dl_hint_search_path = _dl_split_path(hstrtab + hheader->hh_dirlist);
+22:11 < mulander> won't jump into split_path, it seems self explanatory
+22:12 < mulander> so we either use that searchpath or _dl_default_path
+22:12 < mulander> whcih is 42char * _dl_default_path[2] = { "/usr/lib", NULL };
+22:12 < mulander> we have a helper tsod and bsdo
+22:12 < mulander> which are again sod structs
+22:12 < mulander> one stands for transient and the other for 'best'
+22:13 < mulander> I assume bsod is the final pick
+22:13 < mulander> tsod is just a temp variable
+22:13 < mulander> we iterate over the paths
+22:13 < mulander> opendir each one of them
+22:13 < mulander> readdir the folder
+22:13 < mulander> then we call matchfile on each entry
+22:13 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#_dl_match_file
+22:13 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:13 < mulander> 49/*
+22:13 < mulander> 50 * _dl_match_file()
+22:13 < mulander> 51 *
+22:13 < mulander> 52 * This function determines if a given name matches what is specified
+22:13 < mulander> 53 * in a struct sod. The major must match exactly, and the minor must
+22:13 < mulander> 54 * be same or larger.
+22:13 < mulander> 55 *
+22:13 < mulander> 56 * sodp is updated with the minor if this matches.
+22:13 < mulander> 57 */
+22:14 < mulander> the code is pretty straightforward, don't think we need to go over it line by line
+22:15 < mulander> back to call site
+22:15 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+22:15 < mulander> 179                    /*
+22:15 < mulander> 180                     * When a match is found, tsod is
+22:15 < mulander> 181                     * updated with the major+minor found.
+22:15 < mulander> 182                     * This version is compared with the
+22:15 < mulander> 183                     * largest so far (kept in bsod),
+22:15 < mulander> 184                     * and saved if larger.
+22:15 < mulander> 185                     */
+22:15 < mulander> again pretty straightforward
+22:15 < mulander> after going through all entries we closedthe dir
+22:15 < mulander> and return the final hint
+22:15 < mulander> (if we had a match)
+22:16 < mulander> so back at initial callsite
+22:16 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#344
+22:16 < mulander> if we have a hint we jump to fullpathdone
+22:17 < mulander> if not, we try any minor version, ignore hints and go to full path again
+22:17 < mulander> if we fail a second time, we bail out
+22:17 < mulander> if not, we are at fullpathdone
+22:17 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#355
+22:17 < mulander> free lpath as not needed
+22:18 < mulander> build sod, we saw that code before
+22:18 < mulander> and then _dl_find_loaded_shlib
+22:18 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#_dl_find_loaded_shlib
+22:19 < mulander> ok, looks like this goes through all already loaded shared libraries in memory
+22:19 < mulander> and returns a matching one if some other program already loaded it
+22:20 < mulander> if we found something, our call site returns with the elf object
+22:20 < mulander> if not, we fall to again: label
+22:20 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#369
+22:21 < mulander> - /* No '/' in name. Scan the known places, LD_LIBRARY_PATH first.  */
+22:21 < mulander> this calls _dl_find_shlib which we read
+22:21 < mulander> with a different path (_dl_libpath)
+22:21 < mulander> _dl_libpath = _dl_split_path(_dl_getenv("LD_LIBRARY_PATH", envp));
+22:22 < mulander> if we found a hint, we jump to done
+22:22 < mulander> next we check DT_RUNPATH
+22:23 < mulander> and if it was not set
+22:23 < mulander> 384         * If DT_RUNPATH wasn't set then first check DT_RPATH,
+22:23 < mulander> 385         * followed by the main program's DT_RPATH.
+22:23 < mulander> 386         */
+22:23 < mulander> handling is the same, just the paths differ
+22:23 < mulander> next we check standard locations
+22:23 < mulander> so no path provided to _dl_find_shlib
+22:23 < mulander> we saw that when reading that code
+22:24 < mulander> there's again a try_any_minor block
+22:24 < mulander> which restarts the above 'again' block but removing the minor version restriction
+22:24 < mulander> and fails if it ever gets here again
+22:24 < mulander> if not, it reaches done.
+22:25 < mulander> and in done we have some warnings if we pick a mismatching lib by minor
+22:25 < mulander> and call to _dl_tryload_shlib returning an elf object
+22:25 < mulander> and we return that back
+22:25 < mulander> now for the load
+22:25 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library.c#95
+22:27 < mulander> let's schedule that for next read
+22:27 < mulander> and we will target leraning more about the elf format on it
+22:28 < mulander> --- DONE ---

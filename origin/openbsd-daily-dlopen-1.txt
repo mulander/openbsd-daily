@@ -1,0 +1,219 @@
+21:00 [Users #openbsd-daily]
+21:00 [ __gilles       ] [ dial_up    ] [ g0relike  ] [ mandarg   ] [ phy1729   ] [ tdmackey_    ] 
+21:00 [ abecker        ] [ dlg        ] [ geetam    ] [ mattl     ] [ polishdub ] [ Technaton    ] 
+21:00 [ akfaew         ] [ dmfr       ] [ ghostyy   ] [ metadave  ] [ qbit      ] [ thrym        ] 
+21:00 [ akkartik       ] [ dostoyevsky] [ Guest13989] [ metavoid  ] [ raf1      ] [ timclassic   ] 
+21:00 [ antoon_i       ] [ DuClare    ] [ Harry     ] [ mikeb     ] [ rain1     ] [ tmc          ] 
+21:00 [ apelsin        ] [ duncaen    ] [ ija       ] [ mulander  ] [ rgouveia  ] [ toddf        ] 
+21:00 [ apotheon       ] [ dxtr       ] [ jbernard  ] [ Naabed-   ] [ rnelson   ] [ toorop       ] 
+21:00 [ azend|vps      ] [ dzho       ] [ job       ] [ nacci     ] [ rwrc      ] [ TuxOtaku     ] 
+21:00 [ bcallah        ] [ early      ] [ jrmu      ] [ nacelle   ] [ ryan      ] [ vbarros      ] 
+21:00 [ bch            ] [ eau        ] [ jsing     ] [ nailyk    ] [ S007      ] [ VoidWhisperer] 
+21:00 [ biniar         ] [ ebag       ] [ jwit_     ] [ nand1     ] [ salva0    ] [ vyvup        ] 
+21:00 [ blob           ] [ emigrant   ] [ kAworu    ] [ Niamkik   ] [ sam_c     ] [ weezelding   ] 
+21:00 [ brianpc        ] [ entelechy  ] [ kl3       ] [ njt       ] [ Schoentoon] [ Wilawar      ] 
+21:00 [ brtln          ] [ erethon    ] [ kpcyrd    ] [ nnplv     ] [ skrzyp    ] [ wilornel     ] 
+21:00 [ bruflu         ] [ fcambus    ] [ kraucrow  ] [ nopacienc3] [ smiles`   ] [ wuzzah       ] 
+21:00 [ brynet         ] [ fdiskyou   ] [ kysse     ] [ oldlaptop ] [ Soft      ] [ xor29ah      ] 
+21:00 [ cengizIO       ] [ filwisher  ] [ landers2  ] [ oOoO      ] [ solene    ] [ zelest       ] 
+21:00 [ corsah         ] [ fireglow   ] [ lincolnb  ] [ owa       ] [ stateless ] [ zerous       ] 
+21:00 [ desnudopenguino] [ flopper    ] [ lteo[m]   ] [ petrus_lt ] [ t_b       ] 
+21:00 [ Dhole          ] [ FRIGN      ] [ lucias    ] [ philosaur ] [ tarug0    ] 
+21:00 -!- Irssi: #openbsd-daily: Total of 118 nicks [0 ops, 0 halfops, 0 voices, 118 normal]
+21:00 < mulander> --- code read: dlopen ---
+21:01 < mulander> *** goal: learn how dynamic loading works and is implemented ***
+21:02 < mulander> start off with the man page
+21:02 < mulander> https://man.openbsd.org/dlopen
+21:03 < mulander> the reason I am looking at this code at all is because I recently hacked on a port that used dynamic loading to swap renderers (yquake2)
+21:03 < mulander> I want to get deep into the implementation
+21:03 < mulander> but we have a first shallow goal
+21:04 < mulander> a library was not loaded when dlopen("ref_gl1.so") was passed
+21:04 < mulander> the developer assumed the file would load from the current directory, but it did not.
+21:04 < mulander> I ktrace'ed the binary and noticed dlopen trying several paths
+21:04 < mulander> and went to the documentation to learn what it is doing
+21:05 < mulander> --
+21:05 < mulander> The path parameter can be specified as either an absolute pathname to a shared library or just the name of the shared library itself. When an absolute pathname is specified, only the path provided will be searched for the shared library. When just a shared library is specified, the same paths will be searched that are used for “intrinsic” shared library searches.
+21:05 < mulander> --
+21:05 < mulander> so the documentation made us aware that "ref_gl1.so" is not an absolute path, so we would not search in the current directory
+21:05 < mulander> but instead perfor man 'intrinsic' search
+21:05 < mulander> which is all fine and dandy but what does that mean?
+21:06 < mulander> in that specific case, I checked with kdump to see what paths are checked and managed to move forward
+21:06 < mulander> but the initial goal for this read is to learn what is an intrinsic search
+21:10 < mulander> the man page points us at dlfcn.h
+21:11 < mulander> we can find this file here http://bxr.su/OpenBSD/include/dlfcn.h
+21:11 < mulander> we see standard licensing boilerplate, ifndef guards
+21:11 < mulander> a cdefs include
+21:11 < mulander> and a bunch of symboles commented as values for dlopen `mode'
+21:11 < mulander> The mode parameter specifies symbol resolution time and symbol visibility. One of the following values may be used to specify symbol resolution time:
+21:12 < mulander>  
+21:12 < mulander> RTLD_NOW
+21:12 < mulander> Symbols are resolved immediately.
+21:12 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:12 < mulander>  
+21:12 < mulander>  
+21:12 < mulander> RTLD_LAZY
+21:12 < mulander> Symbols are resolved when they are first referred to. This is the default value if resolution time is unspecified.
+21:12 < mulander> One of the following values may be used to specify symbol visibility:
+21:12 < mulander> RTLD_GLOBAL
+21:12 < mulander> The object's symbols and the symbols of its dependencies will be visible to other objects.
+21:12 < mulander> RTLD_LOCAL
+21:12 < mulander> The object's symbols and the symbols of its dependencies will not be visible to other objects. This is the default value if visibility is unspecified.
+21:12 < mulander> --
+21:12 < mulander> in the code we see lazy and now defined, same for local and global
+21:12 < mulander> but what is trace? that seems not documented?
+21:13 < mulander> 44 #define RTLD_TRACE  0x200
+21:13 < mulander> let's keep that in mind, maybe we will hit it later
+21:15 < mulander> next we see defines for dlsym
+21:15 < mulander> dlsym() searches for a definition of symbol in the object designated by handle and all shared objects that it depends on. The symbol's address is returned. If the symbol cannot be resolved, NULL is returned.
+21:15 < mulander> so after we open our lib we use this to locate specific code to call upon
+21:16 < mulander> void * 
+21:16 < mulander> dlsym(void *handle, const char *symbol);
+21:16 < mulander> the comment says
+21:16 < mulander> 47 * Special handle arguments for dlsym().
+21:16 < mulander> they are documented in the manpage
+21:16 < mulander> won't copy paste, but the documented values are: NULL, RTLD_DEFAULT, RTLD_NEXT and RTLD_SELF
+21:17 < mulander> this matches the definitions we see
+21:17 < mulander> 49#define RTLD_NEXT   ((void *) -1)   /* Search subsequent objects. */
+21:17 < mulander> 50#define RTLD_DEFAULT    ((void *) -2)   /* Use default search algorithm. */
+21:17 < mulander> 51#define RTLD_SELF   ((void *) -3)   /* Search the caller itself. */
+21:17 < mulander> next we see a dl_info struct
+21:21 -!- Irssi: Pasting 5 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:21 < mulander> 58typedef struct dl_info {
+21:21 < mulander> 59    const char  *dli_fname; /* Pathname of shared object. */
+21:21 < mulander> 60    void        *dli_fbase; /* Base address of shared object. */
+21:21 < mulander> 61    const char  *dli_sname; /* Name of nearest symbol. */
+21:21 < mulander> 62    void        *dli_saddr; /* Address of nearest symbol. */
+21:21 < mulander> 63} Dl_info;
+21:21 < mulander> the comment informs us the struct is filled up by dladdr
+21:21 < mulander> dladdr() queries the dynamic linker for information about the shared object containing the address addr. The information is returned in the structure specified by info. 
+21:22 < mulander> the documentation proceeds to further document each field
+21:22 < mulander> they cover everything present in dl_info
+21:22 < mulander> int 
+21:22 < mulander> dladdr(const void *addr, Dl_info *info);
+21:22 < mulander> looks like dladdr fills out the struct passed in to it
+21:23 < mulander> next we have a comment about dlctl commands
+21:23 -!- Irssi: Pasting 9 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:23 < mulander> 65/*
+21:23 < mulander> 66 * dlctl() commands
+21:23 < mulander> 67 */
+21:23 < mulander> 68#define DL_GETERRNO 1
+21:23 < mulander> 69#define DL_SETSRCHPATH  x
+21:23 < mulander> 70#define DL_GETLIST  x
+21:23 < mulander> 71#define DL_GETREFCNT    x
+21:23 < mulander> 72#define DL_GETLOADADDR  x
+21:23 < mulander> 73#define DL_SETTHREADLCK 2
+21:23 < mulander> 74#define DL_SETBINDLCK   3
+21:23 < mulander> dlctl() provides an interface similar to ioctl(2) to control several aspects of the run-time linker's operation. This interface is currently under development.
+21:23 < mulander> we saw the ioctl interface before
+21:26 < mulander> this is not documented further
+21:26 < mulander> might be interesting to keep that in mind when we read the code
+21:26 < mulander> and also check if anything in the codebase uses dlctl calls
+21:26  * mulander decides to do a background ag search on the tree while reading
+21:27 < mulander> I don't see a single call site
+21:28 < mulander> I just made a note to check the annotation history on that code later
+21:28 < mulander> to see what 'under development' means
+21:28 < mulander> when, by whom and why that was added
+21:31 < mulander> next up
+21:31 < mulander> 76#define DL_LAZY     RTLD_LAZY   /* Compat */
+21:32 < mulander> grepping for uses of DL_LAZY and seeing where that came from might also be interesting
+21:33 < mulander> and we finish up with a bunch of prototypes for the functions from the man page
+21:33 < mulander> no surprises here
+21:35 < mulander> let's go to the guts
+21:35 < mulander> dynamic linking is handled by the linker
+21:35 < mulander> and we can find it in http://bxr.su/OpenBSD/libexec/ld.so/
+21:35 < mulander> from the manpage and header file
+21:36 < mulander> we can make an educated guess that what we are interested in starts of mainly in dlfcn.c
+21:36 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c
+21:41 < mulander> so we start off with a bunch of includes
+21:41 < mulander> some globals
+21:41 < mulander> forward declares
+21:42 < mulander> and lock_cb which judging by the naming is a function pointer to something used as a callback
+21:42 < mulander> (_cb being callback, _fnc - function)
+21:42 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#50
+21:42 < mulander> dlopen
+21:42 < mulander> takes a name and int flags
+21:43 < mulander> first we check if flags contains only allowed values
+21:43 < mulander> trace, lazy, now or global
+21:43 < mulander> if not we set _dl_errno to DL_INVALID_MODE and return null
+21:44 < mulander> dlerror() returns a character string representing the most recent error that has occurred while processing one of the other functions described here. If no dynamic linking errors have occurred since the last invocation of dlerror(), dlerror() returns NULL. Thus, invoking dlerror() a second time, immediately following a prior invocation, will result in NULL being returned.
+21:44 < mulander> 62    if (libname == NULL)
+21:44 < mulander> 63        return RTLD_DEFAULT;
+21:45 < mulander> this is interesting
+21:45 < mulander> why are we returning RTLD_DEFAULT if no library name is passed?
+21:45 < mulander> 'A null pointer supplied for path will return a special handle that behaves the same as the RTLD_DEFAULT special handle.'
+21:45 < mulander> ok, so that's documented
+21:45 < mulander> RTLD_DEFAULT
+21:45 < mulander> All the visible shared objects and the executable will be searched in the order they were loaded.
+21:46 < mulander> so that's a way to search through everything we dlopen'ed in our program so far I guess?
+21:46 < mulander> 65    if ((flags & RTLD_TRACE) == RTLD_TRACE) {
+21:46 < mulander> 66        _dl_traceld = "true";
+21:46 < mulander> 67        _dl_tracelib = 1;
+21:46 < mulander> 68    }
+21:46 < mulander> 69
+21:46 < mulander> our trace!
+21:46 < mulander> the undocumented function
+21:47 < mulander> so far only setting a traceld value and tracelib
+21:47 < mulander> have an eye out for those uses later
+21:51 < mulander> resolve.h301 #define DL_DEB(P) do { if (_dl_debug) _dl_printf P ; } while (0) macro 
+21:51 < mulander> quick look on DL_DEB
+21:51 < mulander> so just a debugging macro
+21:55 < mulander>  cb = _dl_thread_kern_stop();
+21:55 < mulander> this is more interesting than it seems
+21:55 < mulander> as cb is 53    lock_cb *cb;
+21:55 < mulander> so our callback type
+21:56 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#_dl_thread_kern_stop
+21:56 < mulander> ok there is some indirection here
+21:56 < mulander> _dl_thread_fnc is the global we saw before
+21:57 < mulander> hence why on line 525 we are still checking if it's null
+21:57 < mulander> as by now it might have not been set to anything
+22:00 < mulander> so if I'm not wrong a call to _dl_thread_kern_stop
+22:01 < mulander> will execute _dl_threaD_fnc passing 0 as the argument
+22:01 < mulander> IF the callback was defined
+22:01 < mulander> and return the callback
+22:01 < mulander> or will do nothing (and still return null)
+22:01 < mulander> which is an interesting pattern I never saw before
+22:02 < mulander> back to callsite
+22:02 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#74
+22:02 < mulander> 74    if (_dl_debug_map && _dl_debug_map->r_brk) {
+22:02 < mulander> 75        _dl_debug_map->r_state = RT_ADD;
+22:02 < mulander> 76        (*((void (*)(void))_dl_debug_map->r_brk))();
+22:02 < mulander> 77    }
+22:04 < mulander> _dl_debug_map eventually resolves to http://bxr.su/OpenBSD/include/link.h#81
+22:05 < mulander> the comments do the job perfectly here
+22:05 < mulander> so just read them and lets move on
+22:09 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/resolve.h#53
+22:09 < mulander> is what we will be loading
+22:10 < mulander> I got here by looking up what _dl_loading_object is
+22:14 < mulander> quite a big struct
+22:14 < mulander> not closing that tab but not diving into details
+22:14 < mulander> yet
+22:15 < mulander> next we see a call to _dl_load_shlib
+22:16 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#308
+22:16 < mulander> it has a nice hefty comment documenting how it works
+22:16 < mulander> so read that
+22:16 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#278
+22:17 < mulander> the comment already answers my initial goal
+22:17 < mulander> of learning what and where/why we search
+22:18 < mulander> 280 *      First check loaded objects for a matching shlib, otherwise:
+22:18 < mulander> is interesting
+22:18 < mulander> in the comment
+22:19 < mulander> where is that check?
+22:19 < mulander> does anyone see it?
+22:19 < mulander> otherwise:
+22:19 < mulander> 281 *
+22:19 < mulander> 282 *  If the name contains a '/' use only the path preceding the
+22:19 < mulander> I do see the libname contains '/' check
+22:19 < mulander> in line 318
+22:19 < mulander> but I don't see a check for already loaded objects.
+22:22 < mulander> I'm keeping that tab open
+22:22 < mulander> and going back to _dl_load_shlib callsite
+22:23 < mulander> want to reach end of that fn
+22:23 < mulander> hmm
+22:23 < mulander> thinking
+22:24 < mulander> there are roughly two paths
+22:25 < mulander> one diving into the actual load when the file is found
+22:25 < mulander> and b continuing with the dlopen
+22:25 < mulander> they interleave too much
+22:25 < mulander> so I think it would be best to dive deep into the actual loading code in _dl_load_shlib
+22:26 < mulander> so, let's call it done and pick up next friday continuing from _dl_load_shlib
+22:26 < mulander> --- DONE ---
