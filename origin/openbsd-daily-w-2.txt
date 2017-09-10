@@ -1,0 +1,135 @@
+21:04 [Users #openbsd-daily]
+21:04 [@dlg         ] [ corsah         ] [ flopper      ] [ kysse     ] [ oldlaptop_] [ tarug0       ] 
+21:04 [ __gilles    ] [ desnudopenguino] [ FRIGN        ] [ landers2  ] [ owa       ] [ tdmackey_    ] 
+21:04 [ akfaew      ] [ Dhole          ] [ g0relike     ] [ lteo[m]   ] [ pdvyas    ] [ Technaton    ] 
+21:04 [ akkartik    ] [ dial_up        ] [ geetam       ] [ lucias    ] [ petrus_lt ] [ thrym        ] 
+21:04 [ antoon_i_   ] [ dmfr           ] [ ghostyyy     ] [ mal_      ] [ philosaur ] [ timclassic   ] 
+21:04 [ antranigv   ] [ dostoyevsky    ] [ Guest13989   ] [ mandarg   ] [ phy1729   ] [ toddf        ] 
+21:04 [ apelsin     ] [ DuClare        ] [ Guest85080   ] [ mattl     ] [ pstef     ] [ toorop       ] 
+21:04 [ apotheon    ] [ duncaen        ] [ harrellc00per] [ metadave  ] [ qbit      ] [ TronDD       ] 
+21:04 [ azend|vps   ] [ dxtr           ] [ holsta       ] [ mikeb     ] [ raf1      ] [ TuxOtaku     ] 
+21:04 [ bcallah     ] [ dzho           ] [ horia        ] [ moch      ] [ rain1     ] [ vbarros      ] 
+21:04 [ bcd         ] [ eau            ] [ ija          ] [ mulander  ] [ rEv9      ] [ VoidWhisperer] 
+21:04 [ bch         ] [ ebag           ] [ jbernard     ] [ Naabed-_  ] [ rgouveia  ] [ vyvup        ] 
+21:04 [ biniar      ] [ emigrant       ] [ job          ] [ nacci     ] [ rnelson   ] [ weezelding   ] 
+21:04 [ brianpc     ] [ entelechy      ] [ jsing        ] [ nacelle   ] [ rwrc_     ] [ wilornel     ] 
+21:04 [ brianritchie] [ epony          ] [ jwit         ] [ nailyk    ] [ S007      ] [ xor29ah      ] 
+21:04 [ brtln       ] [ erethon        ] [ kAworu       ] [ nand1     ] [ salva0    ] [ zelest       ] 
+21:04 [ bruflu      ] [ fcambus        ] [ kittens      ] [ nasuga    ] [ skrzyp    ] 
+21:04 [ brynet      ] [ fdiskyou       ] [ kl3          ] [ Niamkik   ] [ smiles`   ] 
+21:04 [ cengizIO    ] [ filwisher      ] [ kpcyrd       ] [ nnplv     ] [ stateless ] 
+21:04 [ corbyhaas   ] [ fireglow       ] [ kraucrow     ] [ nopacienc3] [ t_b       ] 
+21:04 -!- Irssi: #openbsd-daily: Total of 116 nicks [1 ops, 0 halfops, 0 voices, 115 normal]
+21:04 < mulander> --- code read: w/uptime - continued ---
+21:05 < mulander> *** goal: finish the overall read ***
+21:05 < mulander> we ended yesterday finishing reading w.c which is the main bulk of the program
+21:05 < mulander> http://bxr.su/OpenBSD/usr.bin/w/w.c
+21:06 < mulander> there is not much left, going over pr_time and proc_compare
+21:06 < mulander> http://bxr.su/OpenBSD/usr.bin/w/pr_time.c
+21:06 < mulander> as we said before are helper time related formatting functions
+21:07 < mulander> http://bxr.su/s?refs=pr_attime&project=OpenBSD
+21:07 < mulander> 40/*
+21:07 < mulander> 41 * pr_attime --
+21:07 < mulander> 42 *  Print the time since the user logged in.
+21:07 < mulander> 43 */
+21:08 < mulander> not much to go into detail with here, basic calculations on time on time to prepare a format mask for strftime
+21:09 < mulander> the main comment covers it fully
+21:09 < mulander> same for pr_idle
+21:09 < mulander> 76/*
+21:09 < mulander> 77 * pr_idle --
+21:09 < mulander> 78 *  Display the idle time.
+21:10 < mulander> 79 */
+21:10 < mulander> either printing the time in minutes, hours or days idle.
+21:10 < mulander> next up proc_compare http://bxr.su/OpenBSD/usr.bin/w/proc_compare.c
+21:11 < mulander> defines an algorithm for picking the most interesting process to display on the WHAT column
+21:11 -!- Irssi: Pasting 17 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:11 < mulander> 39/*
+21:11 < mulander> 40 * Returns 1 if p2 is "better" than p1
+21:11 < mulander> 41 *
+21:11 < mulander> 42 * The algorithm for picking the "interesting" process is thus:
+21:11 < mulander> 43 *
+21:11 < mulander> 44 *  1) Only foreground processes are eligible - implied.
+21:11 < mulander> 45 *  2) Runnable processes are favored over anything else.  The runner
+21:11 < mulander> 46 *     with the highest cpu utilization is picked (p_estcpu).  Ties are
+21:11 < mulander> 47 *     broken by picking the highest pid.
+21:11 < mulander> 48 *  3) The sleeper with the shortest sleep time is next.  With ties,
+21:11 < mulander> 49 *     we pick out just "short-term" sleepers (P_SINTR == 0).
+21:11 < mulander> 50 *  4) Further ties are broken by picking the highest pid.
+21:11 < mulander> 51 *
+21:11 < mulander> 52 * If you change this, be sure to consider making the change in the kernel
+21:11 < mulander> 53 * too (^T in kern/tty.c).
+21:11 < mulander> 54 *
+21:11 < mulander> 55 * TODO - consider whether pctcpu should be used.
+21:11 < mulander> 56 */
+21:16 < mulander> we have a bunch of macros defined as helper tests
+21:16 < mulander> looking into our kinfo_proc struct
+21:16 < mulander> http://bxr.su/OpenBSD/sys/sys/sysctl.h#316
+21:18 < mulander> if we get a pair of processes, if one of them is runnable
+21:18 < mulander> it wins by default
+21:18 < mulander> if not we pick the one with most cpu utilization
+21:18 < mulander> if they both match on cpu usage we pick the highest pid
+21:19 < mulander> looking at git blame just out of curioisty
+21:20 < mulander> 22 years ago from netbsd import
+21:20 < mulander> I don't know if netbsd randomizes pids but openbsd does
+21:21 < mulander> so picking the highest pid has no meaning here imho
+21:22 < mulander> next we weed out zombies
+21:23 < mulander> same macro handling to pick the one that's not a zombie or one with the highest pid
+21:23 < mulander> next we pick the one with the smallest sleep time
+21:24 < mulander> and preferring one sleeping non-interruptible
+21:24 < mulander> and finally again, one with the highest pid
+21:24 < mulander> if none of the previous check didn't stop
+21:24 < mulander> there's an interesting comment
+21:24 < mulander> 52 * If you change this, be sure to consider making the change in the kernel
+21:24 < mulander> 53 * too (^T in kern/tty.c).
+21:24 < mulander> 54 *
+21:24 < mulander> 55 * TODO - consider whether pctcpu should be used.
+21:25 < mulander> we don't have much code more to read in w and uptime
+21:25 < mulander> so let's see what that is on kernel side
+21:26 < mulander> http://bxr.su/OpenBSD/sys/kern/tty.c
+21:26 < mulander> I don't see a one to one mapping
+21:27 < mulander> but hunting for 'runnable' yields
+21:27 < mulander> http://bxr.su/OpenBSD/sys/kern/tty.c#2130
+21:28 < mulander> and also 
+21:28 < mulander> http://bxr.su/OpenBSD/sys/kern/tty.c#2212
+21:28 < mulander> in the same fn
+21:28 < mulander> it also mentions pctcpu which the w code only asks about in a TODO
+21:29 < mulander> 2126/*
+21:29 < mulander> 2127 * Report on state of foreground process group.
+21:29 < mulander> 2128 */
+21:29 < mulander> 2129void
+21:29 < mulander> 2130ttyinfo(struct tty *tp)
+21:30 < mulander> now, I'm tracking where ttyinfo is called
+21:31 < mulander> http://bxr.su/s?refs=ttyinfo&project=OpenBSD
+21:32 < mulander> there's one in a TIOCSTAT ioctl for kern/tty.c
+21:32 < mulander> case TIOCSTAT:          /* get load avg stats */
+21:32 < mulander> one in
+21:33 < mulander> 229/*
+21:33 < mulander> 230 * Process input of a single character received on a tty.
+21:33 < mulander> 231 */
+21:33 < mulander> 232int
+21:33 < mulander> 233ttyinput(int c, struct tty *tp)
+21:33 < mulander> handling siginfo
+21:33 < mulander> 516        /*
+21:33 < mulander> 517         * ^T - kernel info and generate SIGINFO
+21:33 < mulander> 518         */
+21:35 < mulander> back to http://bxr.su/OpenBSD/sys/kern/tty.c#2130
+21:37 < mulander> in a similar way two processes are compard step by step here
+21:37 < mulander> the loops are explicit as we are working with the structure directly, not as a called comparison operator
+21:39 < mulander> * Otherwise take the most recently added to this process group
+21:40 < mulander> so it's not picking the highest pid
+21:40 < mulander> let's check if it's done by pid number
+21:40 -!- rwrc_ is now known as rwrc
+21:41 < mulander> nope, it's not making any decisions based on pid
+21:41 < mulander> but I assume what's newest is actually represented by the TAILQ
+21:42 < mulander> knowing that the last processed is the newest added
+21:42 < mulander> so pctcpu stands for
+21:43 < mulander> kinfo_proc exposses p_pctcpu so we could implement the same check here as it is implemented in ttyinfo
+21:43 < mulander> wonder if it was added later
+21:44 < mulander> ah didn't paste
+21:44 < mulander> 2190        /* Calculate percentage cpu, resident set size. */
+21:46 < mulander> so pctcpu was molded in 9 and 3 years ago
+21:47 < mulander> https://github.com/openbsd/src/commit/436455af1bb83ac82d7665161557a2714f602fa7
+21:47 < mulander> https://github.com/openbsd/src/commit/494499d6f03ff30a15dfd0b8498eb92629bc23ee
+21:47 < mulander> I don't see a comment stating to consider updating 'w' if changing the algorithm here, but that's food for thought
+21:47 < mulander> perhaps adding pctcpu to w would be worthwile?
+21:50 < mulander> --- DONE ---
