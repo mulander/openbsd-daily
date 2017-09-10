@@ -1,0 +1,177 @@
+21:00 [Users #openbsd-daily]
+21:00 [ __gilles ] [ dial_up    ] [ flopper    ] [ landers2  ] [ petrus_lt ] [ tdmackey     ] 
+21:00 [ abecker  ] [ dlg        ] [ fyuuri     ] [ leah2     ] [ philosaur ] [ Technaton    ] 
+21:00 [ akfaew   ] [ dmfr       ] [ geetam     ] [ lteo[m]   ] [ phy1729   ] [ thrym        ] 
+21:00 [ akkartik ] [ dostoyevsky] [ ghostyy    ] [ lucias    ] [ polishdub ] [ timclassic   ] 
+21:00 [ antranigv] [ DuClare    ] [ gk_        ] [ mandarg   ] [ qbit      ] [ tmc          ] 
+21:00 [ apotheon ] [ duncaen    ] [ Guest54057 ] [ mattl     ] [ raf1      ] [ toddf        ] 
+21:00 [ azend|vps] [ dxtr       ] [ gurwall    ] [ metavoid  ] [ rnelson   ] [ toorop       ] 
+21:00 [ bcallah  ] [ early      ] [ jaypatelani] [ mikeb     ] [ rwrc      ] [ TronDD-w     ] 
+21:00 [ bcd      ] [ eau        ] [ jbernard   ] [ mulander  ] [ ryan      ] [ vbarros      ] 
+21:00 [ biniar   ] [ ebag       ] [ job        ] [ Naabed-   ] [ S007      ] [ vmlinuz      ] 
+21:00 [ blob     ] [ emigrant   ] [ johnny-o   ] [ nailyk    ] [ sam_c     ] [ VoidWhisperer] 
+21:00 [ brianpc_ ] [ entelechy  ] [ jonne1     ] [ nand1     ] [ Schoentoon] [ weezelding   ] 
+21:00 [ brtln    ] [ epony      ] [ jsing      ] [ Niamkik   ] [ sigjuice  ] [ wilornel     ] 
+21:00 [ bruflu   ] [ erethon    ] [ jwit       ] [ nielsk    ] [ skrzyp    ] [ wuzzah       ] 
+21:00 [ brynet   ] [ fcambus    ] [ kAworu     ] [ njt       ] [ stark     ] [ zelest       ] 
+21:00 [ cengizIO ] [ fdiskyou   ] [ kl3        ] [ nopacienc3] [ stateless ] [ zerous       ] 
+21:00 [ corsah   ] [ filwisher  ] [ kraucrow   ] [ oldlaptop ] [ steinex   ] 
+21:00 [ Dhole    ] [ fireglow   ] [ kysse      ] [ owa       ] [ tarug0    ] 
+21:00 -!- Irssi: #openbsd-daily: Total of 106 nicks [0 ops, 0 halfops, 0 voices, 106 normal]
+21:00 < mulander> --- code read: dlopen 4 ---
+21:00 < mulander> *** goal: continue where we left off
+21:01 < mulander> we have a slight hickup with bxr.su so bear with me as I update our relevant links to pick up where we left of
+21:01 < mulander> previous reads:
+21:01 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-1.txt
+21:01 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-2.txt
+21:01 < mulander> - - https://junk.tintagel.pl/openbsd-daily-dlopen-3.txt
+21:01 < mulander> usual handy links
+21:01 < mulander>  man page: https://man.openbsd.org/dlopen
+21:02 < mulander> header file: https://github.com/openbsd/src/blob/master/include/dlfcn.h
+21:03 < mulander> call stack of where we left off
+21:04 < mulander> 1) https://github.com/openbsd/src/blob/master/libexec/ld.so/dlfcn.c#L83
+21:05 < mulander> 2) https://github.com/openbsd/src/blob/master/libexec/ld.so/library_subr.c#L421
+21:05 < mulander> 3) https://github.com/openbsd/src/blob/master/libexec/ld.so/library.c#L95
+21:06 < mulander> 3.1) https://github.com/openbsd/src/blob/master/libexec/ld.so/library.c#L298
+21:06 < mulander> 4) https://github.com/openbsd/src/blob/master/libexec/ld.so/resolve.c#L250
+21:06 < mulander> is where we left off
+21:06 -!- martin__ is now known as martin_2
+21:07 < mulander> so previously we put the object file into memory, closed the file handle
+21:07 < mulander> and now calling into dl finalize
+21:11 < mulander> so let's go
+21:11 < mulander> first we see an if'defed out _dl_printf call, just to have a handy debug printf around I guess
+21:11 < mulander> going back to the call site
+21:11 < mulander> in L298 of library.c
+21:12 < mulander> 	dynp = (Elf_Dyn *)((unsigned long)dynp + loff);
+21:12 < mulander> 	object = _dl_finalize_object(libname, dynp,
+21:12 < mulander> 	    (Elf_Phdr *)((char *)libaddr + ehdr->e_phoff), ehdr->e_phnum,type,
+21:12 < mulander> libaddr, loff);
+21:15 < mulander> ok so dynp points at dynamic linking information
+21:15 < mulander> https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
+21:15 < mulander> another handy link
+21:18 < mulander> ok so we callocate elf_object_t size of memory
+21:22 < mulander> we start off by setting prev/next to null
+21:23 < mulander> and point the dynamic data (load_dyn) to our calculated dynp
+21:25 < mulander> no we work on dynp->d_tag
+21:25 < mulander> that's defined in sys/sys/exec_elf.h
+21:26 < mulander> https://github.com/openbsd/src/blob/master/sys/sys/exec_elf.h#L445
+21:26 < mulander> d_tag /* controls meaning of d_val */
+21:26 < mulander> https://github.com/openbsd/src/blob/master/sys/sys/exec_elf.h#L462
+21:27 < mulander> I'm reading the list to get a feel
+21:29 < mulander> so what we got prevoiusly by the code in _dl_tryload_shlib
+21:30 < mulander> were dynamic sections and addresses
+21:30 < mulander> there was a point where we could already have an object - but that was only if it was already loaded and found in memory
+21:30 < mulander> so _dl_finalize_object takes that information and actually does the loading
+21:32 < mulander> we start looping over the object file sections
+21:33 < mulander> the memory was already prepared in the caller
+21:34 < mulander> we covere that on last read
+21:34 < mulander> we do this until we hit a DT_NULL section
+21:35 < mulander> DT_NUM is defined in resolve.h as DT_PREINIT_ARRAYSZ + 1
+21:36 < mulander> if the dt_tag is in the range
+21:36 < mulander> we store information on the type of tag we have
+21:36 < mulander> in an union field Dyn
+21:37 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/resolve.h#L68
+21:39 < mulander> so if I'm reading this correctly this will index into one of the fields in that large struct
+21:39 < mulander> depending on the type
+21:39 < mulander> as they match in order
+21:39 < mulander> and directly write the value to the memory
+21:39 < mulander> without referring ot the object by name
+21:39 < mulander> so we have a generic
+21:39 < mulander> object->Dyn.info[dynp->d_tag] = dynp->d_un.d_val;
+21:39 < mulander> that handles filling out 33 different structs
+21:40 < mulander> instead of doing object->Dyn.u.$name = value;
+21:40 < mulander> for each of the fields
+21:40 < martin_2> is bxr.su gone?
+21:41 < mulander> martin_2: https://twitter.com/Mcnst
+21:41 < mulander> https://www.hetzner-status.de/en.html#7636
+21:41 < mulander> it's unavailable atm, hence the github links
+21:41 < mulander> I assume it will be back sooner or later
+21:42 < martin_2> OK
+21:43 < mulander> back on track, so that trick is pretty neat and I didn't see it before (indexing into an union struct that way like a dispatch)
+21:44 < mulander> next handling for
+21:44 < mulander> #define DT_LOPROC0x70000000/* reserved range for processor */
+21:46 < mulander> DT_PROCNUM is machine dependant
+21:47 < mulander> ie. defined in sys/arch/alpha/include/exec.h
+21:50 < mulander> so first it makes sure the d_tag is in allowed range (the reserved space)
+21:50 < mulander> then assigns to it using the same indexing into the union
+21:51 < mulander> but it's essentially indexing past the fields we have defined on purpose?
+21:52 < mulander> next
+21:52 < mulander> #define DT_TEXTREL22/* Allow rel. mod. to unwritable seg */
+21:53 < mulander> simple one, just assigns to the textrel field
+21:54 < mulander> same for DT_SYMBOLIC #define DT_SYMBOLIC16/* start sym search in shared obj. */
+21:54 < mulander> DT_BIND_NOW flips a flag in the obj_for DF_1_NOW
+21:54 < mulander> from the comment we know /* Bind now regardless of env setting */
+21:54 < mulander> so as far as I understand dynamic linking
+21:54 < mulander> usually on startup the files aren't actually loaded
+21:55 < mulander> but the address of symbols point to a resolver function
+21:55 < mulander> and when that function is called for the first time at runtime
+21:55 < mulander> the resolver gets called
+21:55 < mulander> looks up the actuall address and from then on all calls are made directly
+21:56 < mulander> but that initial lazy binding speeds up the initial program load
+21:56 < mulander> and from the ld.so manpage
+21:56 < mulander> http://man.openbsd.org/ld.so
+21:57 < mulander>      
+21:57 < mulander> LD_BIND_NOW
+21:57 < mulander>     Specifies that the dynamic linker should process all relocations before transferring control to the program. Normally, the procedure linkage table entries are handled lazily, avoiding symbol lookup and relocation for unused functions. This variable is ignored for set-user-ID and set-group-ID executables. 
+21:57 < mulander> so this flag can be ignored by the loadable object
+21:57 < mulander> if it defined a DT_BIND_NOW
+21:58 < mulander> so the docs mentions suid executables
+21:58 < mulander> that makes sense, since if we are loading lazily and can alter for example the loading path
+21:59 < mulander> or substitute a library
+21:59 < mulander> we could trick loading it later during runtime if we know how to trigger a rare code path that would resolve a currently unresolved function
+21:59 < mulander> if we bind those on startup, the exposure window is gone past load
+22:00 < mulander> next we handle DT_FLAGS_1 and DT_FLAGS
+22:00 < mulander> so DT_FLAGS_1 are dynamic flags
+22:00 < mulander> https://github.com/openbsd/src/blob/master/sys/sys/exec_elf.h#L515
+22:02 < mulander> handling is pretty clearcut here
+22:03 < mulander> assign the flags, then some special processing for SYMBOLIC, ORIGIN and BIND_NOW
+22:04 < mulander> next #define DT_RELCOUNT0x6ffffffa/* relocs, which must come first */
+22:04 < mulander> again just storing it into memory, same for RELCOUNT
+22:04 < mulander> and dynp++ is bumped up
+22:04 < mulander> to the next elf dynamic section
+22:06 < mulander> ld.so/resolve.h
+22:06 < mulander> 301:#define DL_DEB(P) do { if (_dl_debug) _dl_printf P ; } while (0)
+22:06 < mulander> is the first thing called after the loop
+22:06 < mulander> just debug output
+22:06 < mulander> prints the obj_flags we set above in hex
+22:07 < mulander> next bit is nicely explained by the comment
+22:07 < mulander> 		/*
+22:07 < mulander> 		 * no loading object, object is the loading object,
+22:07 < mulander> 		 * as it is either executable, or dlopened()
+22:07 < mulander> 		 */
+22:11 < mulander> so if DF_1_NOOPEN is set, and we are loading a dynamically linked object, with _dl_traceld set to null - bail out with error.
+22:12 < mulander> 	/*
+22:12 < mulander> 	 *  Now relocate all pointer to dynamic info, but only
+22:12 < mulander> 	 *  the ones which have pointer values.
+22:12 < mulander> 	 */
+22:15 < mulander> next we initialize a hash table for symbols we already resolve
+22:15 < mulander> *for symbols that we will later resolve
+22:16 < mulander> store some additional data in our loaded object, including what caused it to load
+22:16 < mulander> (the _dl_loading_object)
+22:16 < mulander> we can see that the debug output here would show us what loaded what
+22:16 < mulander> as one .so could depend on others
+22:20 < mulander> then we store the paths for lookup of other objects
+22:20 < mulander> before the call ends
+22:20 < mulander> we have 2 more functions
+22:21 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/resolve.c#L227
+22:22 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/resolve.c#L210
+22:22 < mulander> I think we went through those 2 before
+22:24 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/trace.c#L83
+22:24 < mulander> we won't dive into this one
+22:24 < mulander> looks like it just handles debug tracing
+22:24 < mulander> http://man.openbsd.org/ld.so
+22:24 < mulander> LD_TRACE_LOADED_OBJECT with an optional format mask
+22:25 < mulander> so back to our call stack
+22:25 < mulander> 1) https://github.com/openbsd/src/blob/master/libexec/ld.so/dlfcn.c#L83
+22:25 < mulander> 2) https://github.com/openbsd/src/blob/master/libexec/ld.so/library_subr.c#L421
+22:25 < mulander> 3.1) https://github.com/openbsd/src/blob/master/libexec/ld.so/library.c#L298
+22:27 < mulander> we have an object loaded (or we just free memory and the load list if not)
+22:28 < mulander> and _dl_set_sod just calls out to _dl_build_sod which we covered in dlopen read 2.
+22:29 < mulander> so that covers _dl_tryload_shlib
+22:29 < mulander> so back in _dl_load_shlib
+22:30 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/library_subr.c#L421
+22:30 < mulander> we have an object and return
+22:30 < mulander> and that moves us back to dlopen
+22:30 < mulander> https://github.com/openbsd/src/blob/master/libexec/ld.so/dlfcn.c#L83
+22:31 < mulander> where we will pick up next week on probably the last dlopen read
+22:31 < mulander> --- DONE ---

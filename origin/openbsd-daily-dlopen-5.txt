@@ -1,0 +1,107 @@
+20:59 [Users #openbsd-daily]
+20:59 [ abecker    ] [ DuClare ] [ Guest15154] [ lucias   ] [ philosaur ] [ thrym     ] 
+20:59 [ antoon_i   ] [ duncaen ] [ Guest74546] [ mandarg  ] [ phy1729   ] [ timclassic] 
+20:59 [ antranigv  ] [ dxtr    ] [ jbernard  ] [ mattl_   ] [ polishdub ] [ tmc       ] 
+20:59 [ apotheon   ] [ early   ] [ job-      ] [ metavoid ] [ qbit      ] [ toddf     ] 
+20:59 [ azend|vps  ] [ eau     ] [ jonne1    ] [ mulander ] [ raf1      ] [ vmlinuz   ] 
+20:59 [ bcd        ] [ emigrant] [ jsing     ] [ nailyk   ] [ rnelson   ] [ weezelding] 
+20:59 [ brtln      ] [ epony   ] [ jwit      ] [ nand1    ] [ salva     ] [ Wilawar   ] 
+20:59 [ brynet     ] [ erethon ] [ kAworu    ] [ Niamkik  ] [ sam_c     ] [ zelest    ] 
+20:59 [ bsdtux     ] [ fcambus ] [ kl3       ] [ nielsk   ] [ Schoentoon] [ zerous    ] 
+20:59 [ cengizIO   ] [ fdiskyou] [ kraucrow  ] [ njt      ] [ sigjuice  ] 
+20:59 [ davl       ] [ fireglow] [ kysse     ] [ oldlaptop] [ skizye    ] 
+20:59 [ Dhole      ] [ geetam  ] [ landers2  ] [ owa      ] [ stateless ] 
+20:59 [ dostoyevsky] [ ghostyy ] [ lteo[m]   ] [ petrus_lt] [ Technaton ] 
+20:59 -!- Irssi: #openbsd-daily: Total of 74 nicks [0 ops, 0 halfops, 0 voices, 74 normal]
+21:00 < mulander> --- code read: dlopen 5 ---
+21:00 < mulander> *** goal: finish reading dlopen ***
+21:00 < mulander> previous reads:
+21:00 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-1.txt
+21:00 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-2.txt
+21:00 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-3.txt
+21:01 < mulander> - https://junk.tintagel.pl/openbsd-daily-dlopen-4.txt
+21:01 < mulander> handy links:
+21:01 < mulander> - https://man.openbsd.org/dlopen
+21:01 < mulander> - http://man.openbsd.org/ld.so
+21:01 < mulander> dlopen header file
+21:02 < mulander> - http://bxr.su/OpenBSD/include/dlfcn.h
+21:03 < mulander> we went up our call stack on the last read back to the top-level dlopen
+21:03 < mulander> so we resume from http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#83
+21:03 < mulander> at this point we have an elf object loaded
+21:03 < mulander> and symbols set to the resolver
+21:03 < mulander> unless bind now was specified
+21:04 < mulander> so the next significant call in dlfcn.c
+21:04 < mulander> 90    _dl_link_dlopen(object);
+21:05 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#429
+21:06 < mulander> we saw calls to this before when loading the elf object
+21:06 < mulander> the comment  /* this add_object should not be here, XXX */ is interesting but we will not dive into it
+21:07 < mulander> DL_DEB calls are just debug output
+21:07 < mulander> next up
+21:07 < mulander> 107    if ((failed = _dl_load_dep_libs(object, obj_flags, 0)) == 1) {
+21:08 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/loader.c#271
+21:09 < mulander> so I assume this loads any .so files that our dlopened .so file might depend on
+21:09 < mulander> 284        /* propagate DF_1_NOW to deplibs (can be set by dynamic tags) */
+21:09 < mulander> 285        depflags = flags | (dynobj->obj_flags & DF_1_NOW);
+21:09 < mulander> if the main dlopened library is binded on load we push that downards to dependencies
+21:10 < mulander> next
+21:10 < mulander> 287        for (dynp = dynobj->load_dyn; dynp->d_tag; dynp++) {
+21:10 < mulander> 288            if (dynp->d_tag == DT_NEEDED) {
+21:10 < mulander> 289                libcount++;
+21:10 < mulander> 290            }
+21:10 < mulander> 291        }
+21:10 < mulander> we see how many libs we have to load
+21:12 < mulander> we build up a list of dependencies
+21:12 < mulander> then randomise it
+21:12 < mulander> and loop over each required element loading it with a call we already went through in detail
+21:12 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/loader.c#335
+21:14 < mulander> after loading we see
+21:14 < mulander> 352            for (loop = 0; loop < libcount; loop++) {
+21:14 < mulander> 353                _dl_add_object(liblist[loop].depobj);
+21:14 < mulander> 354                _dl_link_child(liblist[loop].depobj, dynobj);
+21:14 < mulander> 355            }
+21:14 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/resolve.c#54
+21:15 < mulander> just the loaded objects book keeping
+21:15 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#510
+21:15 < mulander> again dependency book keeping
+21:16 < mulander> and the last two calls
+21:16 < mulander> 362    /* add first object manually */
+21:16 < mulander> 363    _dl_link_grpsym(object, 1);
+21:16 < mulander> 364    _dl_cache_grpsym_list_setup(object);
+21:17 < mulander> boil down to
+21:17 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/library_subr.c#_dl_cache_grpsym_list
+21:17 < mulander> explained by the comment
+21:17 < mulander> 577    /*
+21:17 < mulander> 578     * grpsym_list is an ordered list of all child libs of the
+21:17 < mulander> 579     * _dl_loading_object with no dups. The order is equivalent
+21:17 < mulander> 580     * to a breadth-first traversal of the child list without dups.
+21:17 < mulander> 581     */
+21:19 < mulander> so we return back to dlopen
+21:20 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#107
+21:22 < mulander> if we failed to load
+21:22 < mulander> http://bxr.su/OpenBSD/libexec/ld.so/dlfcn.c#_dl_real_close
+21:23 < mulander> (failed to load deps)
+21:23 < mulander> we proceed to clean up the main dlopened library
+21:23 < mulander> running destructors, freeing memory, unloading the lib etc
+21:23 < mulander> and doing all the ref counting book keeping
+21:24 < mulander> otherwise if we succeeded
+21:25 < mulander> again we see a chunk of code responsible for tracing of what's loaded
+21:27 < mulander> if loading went fine we do relocation and call constructors from the loaded lib
+21:28 < mulander> finally we reach the end of dlopen
+21:28 < rsadowski> Hi All
+21:28 < mulander> o/ rsadowski 
+21:28 < mulander> so that leaves us done with dlopen itself and needing to decide where to go next for further reads
+21:28  * mulander digs up notes
+21:29 < mulander> > dlctl() provides an interface similar to ioctl(2) to control several aspects of the run-time linker's operation. This interface is currently under development.
+21:30 < mulander> > 76#define DL_LAZY     RTLD_LAZY   /* Compat */
+21:30 < mulander> regarding dlctl
+21:31 < mulander> we could investigate what 'under development means' and if the interface is at all used anywhere
+21:31 < mulander> and compare it to other bsd and nix family os'es
+21:31 < mulander> regarding DL_LAZY
+21:31 < mulander> we could see where it came from, if it's used etc.
+21:32 < mulander> or alternatively we could change the topic completely away from dlopen and dynamic linking
+21:34 < mulander> http://www.strawpoll.me/13735633
+21:34 < mulander> please vote for the next read
+21:34 < mulander> as usual next friday 19:00 UTC based on the poll results
+21:34 < mulander> if voting for 'something other' please send me an email with a topic suggestion - it's quite easy to get a hold of my mail
+21:35 < mulander> and I will count email suggestions with a higher weight than poll votes.
+21:35 < mulander> --- DONE ---
