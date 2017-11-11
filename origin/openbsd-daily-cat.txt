@@ -1,0 +1,191 @@
+18:53 [Users #openbsd-daily]
+18:53 [ \renaud        ] [ duncaen       ] [ ghostyy ] [ lucias   ] [ phy1729   ] [ timclassic] 
+18:53 [ adulteratedjedi] [ dxtr          ] [ Guest56 ] [ mandarg  ] [ polishdub ] [ tmc       ] 
+18:53 [ antranigv      ] [ early         ] [ Harry   ] [ mattl    ] [ porteous  ] [ toddf     ] 
+18:53 [ apotheon       ] [ eau           ] [ jmsx    ] [ mooghog  ] [ qbit      ] [ toorop    ] 
+18:53 [ azend|vps      ] [ emigrant      ] [ job     ] [ mulander ] [ rofltech  ] [ vyss      ] 
+18:53 [ bcd            ] [ endojelly     ] [ jsing   ] [ nand1_   ] [ rsadowski ] [ vyvup     ] 
+18:53 [ beiroot        ] [ epony         ] [ jwit_   ] [ Niamkik  ] [ S007      ] [ weezelding] 
+18:53 [ brynet         ] [ erethon2      ] [ kAworu  ] [ nielsk   ] [ salva     ] [ Wilawar   ] 
+18:53 [ bumclock       ] [ fcambus       ] [ kl3     ] [ njt      ] [ Schoentoon] [ zautomata ] 
+18:53 [ cengizIO       ] [ fireglow      ] [ kraucrow] [ oldlaptop] [ sigjuice  ] [ zelest    ] 
+18:53 [ corsah_        ] [ freakazoid0223] [ kysse   ] [ owa      ] [ SOLARIS_s ] 
+18:53 [ davl           ] [ FRIGN         ] [ leah2   ] [ pardis   ] [ stateless ] 
+18:53 [ Dhole          ] [ fyuuri        ] [ leochill] [ petrus_lt] [ thrym     ] 
+18:53 [ DuClare        ] [ geetam        ] [ lteo[m] ] [ philosaur] [ thrym__   ] 
+18:53 -!- Irssi: #openbsd-daily: Total of 80 nicks [0 ops, 0 halfops, 0 voices, 80 normal]
+19:52 < Niamkik> 10 minutes left :)
+19:53 < Niamkik> I hope everyone is there :p
+20:00 < Niamkik> So, tonight I am reading /bin/cat implementation
+20:00 < Niamkik> It's my first read and I'm not a C expert. If I make mistake or something like that, don't hesitate to tell me what is wrong. :)
+20:00 < Niamkik> --- code read: /bin/cat ---
+20:01 < Niamkik> *** How cat(1) command is implemented on OpenBSD ***
+20:01 < Niamkik> Before starting, some useful links:
+20:01 < Niamkik>  * OpenBSD Man Page: https://man.openbsd.org/cat
+20:01 < Niamkik>  * Official OpenBSD Repository: https://cvsweb.openbsd.org/cgi-bin/cvsweb/src/bin/cat/
+20:01 < Niamkik>  * Official OpenBSD Github Mirror: https://github.com/openbsd/src/tree/master/bin/cat
+20:02 < Niamkik>  * OpenGrok (bxr.su): http://bxr.su/OpenBSD/bin/cat/
+20:02 < Niamkik>  * POSIX Specification: http://pubs.opengroup.org/onlinepubs/9699919799/utilities/cat.html
+20:02 < Niamkik> Ok! I think we can start by reading the man page.
+20:02 < Niamkik>  $ man cat
+20:03 < Niamkik> command name "cat" refer to concatenate and print files. Just for information, this command is pretty old, and you can find it from UNIX1 (original source code from UNIX1 is available on github https://github.com/qrush/unix/blob/master/src/cmd/cat.s)
+20:04 < Niamkik> cat command can be executed like that:
+20:04 < Niamkik>  $ cat -benstuv file1 file2 fileN
+20:06 < Niamkik> All files are reads sequentially and put to standard output, in order. if one argument is a dash '-', cat command will read from standard input.
+20:06 < Niamkik> cat supports those options:
+20:07 < Niamkik>  -b: numbers lines but don't count blank one
+20:07 < Niamkik>  -e: print '$' at the end of each line and implies -v flags to display non-printing characters
+20:08 < Niamkik>  -n: numbers all lines
+20:08 < Niamkik>  -s: remove multiple adjacent empty line (single spaced output)
+20:09 < Niamkik>  -t: print tab as '^I' and implies -v flag
+20:09 < Niamkik>  -u: output is guaranteed to be unbuffered (we'ill see that in source)
+20:11 < Niamkik>  -v: displays all non-printing characters. Control characters replaced by '^X' (X is a char), replace DEL char by ^?. Other non-ascii charaters are replaced by 'M-X'.
+20:12 < Niamkik> cat(1) exits 0 on success and >0 if error occurs.
+20:12 < Niamkik> I think everyone has used this command, so, I can switch example part.
+20:13 < Niamkik> caveats seems also logic (overwrite/concatenate file with cat).
+20:14 < Niamkik> Let go for the source! http://bxr.su/OpenBSD/bin/cat/cat.c
+20:15 < Niamkik> This read refer to OpenBSD cat version 1.26 (you can see this version number on the first line, in comment).
+20:15 < Niamkik> [L2] refer to NetBSD versionning, this code come from NetBSD and was forked in 1995.
+20:17 < Niamkik> [L4-34] its the 3-clause BSD License, if you want more information about this one, you can find more resource there: https://opensource.org/licenses/BSD-3-Clause
+20:18 < Niamkik> [L36] first preprocessor directive, its an include. cat(1) need lseek, ftruncate and truncate functions available only in sys/types.h.
+20:18 < Niamkik> [L37] cat(1) require also fstat function from sys/stat.h.
+20:19 < Niamkik> [L39] ctypes.h give us isascii and toascii functions also used in cat(1).
+20:20 < Niamkik> [L40] err.h refer to err and warn functions
+20:21 < Niamkik> [L41] cat(1) manage errors, in this cas, errno headers are needed and export some external variables and is mainly required to print error value.
+20:22 < Niamkik> [L42] open function is required by cat(1), this function is found in fcntl.h
+20:23 < Niamkik> [L43] I think everyone know stdio.h, this header is required here for lot of function used by cat: setvbuf, fprintf, fclose, fopen, clearerr, getc, ferror, putchar and fileno
+20:24 < Niamkik> [L44] memory allocation is needed by cat, stdlib header give us malloc function
+20:25 < Niamkik> [L45] strcmp function is used in cat, this function is in string.h
+20:26 < Niamkik> [L46]  the last header, unistd.h, import 4 functions: getopt, pledge, read and write.
+20:27 < Niamkik> [L48] MAXIMUM preprocessor macro is defined. This macro take 2 argument, and do a simple check: if first argument is greater than second, we return first else we return second one.
+20:29 < Niamkik> [L50] __progname is a pointer to char (a string) and is defined as external variable, so ,this variable is accessible from everywhere in the code.
+20:30 < Niamkik> I think this variable could be found in another part of OpenBSD source (http://bxr.su/s?defs=__progname&project=OpenBSD)
+20:31 < mulander> Niamkik: see man -k progname
+20:31 < Niamkik> ok, its come from stdlib :)
+20:33 < Niamkik> [L52] all flags are defined there. Those flags refer to cat arguments , bflag => -b, eflag => -e... You can see above if you want all flag list.
+20:33 < Niamkik> [L53] rflag => '-r'
+20:34 < Niamkik> [L54] filename is defined as a pointer to char (string).
+20:34 < mulander> L53 is rval, the return value I believe
+20:34 < Niamkik> mulander: oh, yep
+20:35 < Niamkik> Line 105
+20:35 < Niamkik> its main return value.
+20:36 < Niamkik> [L56-59] prototypes of cat functions are defined these: cook_args, cook_buf, raw_args and raw_cat functions. 
+20:38 < Niamkik> [L61-62] its our main entry point. If you are familiar with C, this function is trivial and take 2 arguments, argc (numbers of arguments) and *argv[] a pointer all arguments.
+20:38 < Niamkik> [L64] ch variable is defined as integer and will contain a character
+20:40 < Niamkik> [L66-67] pledge (https://man.openbsd.org/pledge) is initialized there with 2 promises: stdio and rpath
+20:41 < Niamkik> stdio promise give access to lseek, ftruncate, truncate, fstat, read and write functions
+20:41 < Niamkik> rpath give access to fstat function
+20:43 < Niamkik> if pledge can't be initialized, we execute err function (indicating pledge) and we stop the execution of the program.
+20:44 < Niamkik> [L69-97] argument parsing loop.
+20:46 < Niamkik> [L69] we found all our previous flag defined in getopt function ("benstuv"), getopt take 3 arguments, the first is the number of argument (argc) the second is all arguments (argv) and, finally, all allowed flags ("benstuv").
+20:46 < Niamkik> we store the return value in ch variable (defined above) and do that until getopt return -1.
+20:47 < Niamkik> [L70] ch variable is passed to a switch statement
+20:47 < Niamkik> [L71-73] bflag is set if -b is present in argv
+20:48 < mulander> actually both bflag and nflag get set if b is present
+20:48 < Niamkik> [L74-76] eflag is set if -e flag is present in argv. NOTE: bflag implies vflag, and is also set here.
+20:48 < Niamkik> mulander: yep. missed this one :)
+20:48 < Niamkik> thanks
+20:49 < Niamkik> [L77-79] nflag is set if -n is present in argv
+20:49 < Niamkik> [L80-82] sflag is set if -s flag is present in argv
+20:50 < Niamkik> [L83-85] tflag is set if -t flag is present in argv. tflag implies vflag, so vflag is also set.
+20:52 < Niamkik> [L86-88] uflag is set if -u is present in argv. In this case, setvbuf (\u200bhttps://man.openbsd.org/setvbuf) is called, and force unbuffered stdout.
+20:53 < Niamkik> first argument is a pointer to FILE structure, second is a pointer to buffer, followed by mode (unbuffered, _IONBF, and finally a size value)
+20:54 < Niamkik> last parameter is set to 0 to obtain deferred optimal-size buffer allocation (from man page)
+20:55 < mulander> and in case of setting _IONBF both the buf parameter and size are just ignored.
+20:55 < Niamkik> ok
+20:55 < mulander> http://bxr.su/OpenBSD/lib/libc/stdio/setvbuf.c
+20:55 < mulander> 49    /*
+20:55 < mulander> 50     * Verify arguments.  The `int' limit on `size' is due to this
+20:55 < mulander> 51     * particular implementation.  Note, buf and size are ignored
+20:55 < mulander> 52     * when setting _IONBF.
+20:55 < mulander> 53     */
+20:56 < Niamkik> its also in the man page: If the size argument is not zero but buf is NULL, a buffer of the given size will be allocated immediately, and released on close.
+20:57 < Niamkik> but size parameter seems not portable: This is an extension to ANSI C; portable code should use a size of 0 with any NULL buffer.
+20:58 < Niamkik> [L89-91] if -v flag is present in argv, vflag is set.
+20:59 < Niamkik> [L92-95] if another flag is present and not present in specified one, program is stopped, print usage with fprintf on stderr, and return 1.
+21:00 < Niamkik> [L97] we are always in while loop! argv is incremented optind (from unistd.h)
+21:01 < Niamkik> optind is an external variable, you can see that in man page: https://man.openbsd.org/man3/getopt.3
+21:02 < Niamkik> [getopt] "The variables opterr and optind are both initialized to 1. The optind variable may be set to another value larger than 0 before a set of calls to getopt() in order to skip over more or less argv entries. An optind value of 0 is reserved for compatibility with GNU getopt()."
+21:03 < Niamkik> so, to be clear, argv is increment by one, and point to next flag from command line
+21:03 < Niamkik> incremented*
+21:04 < Niamkik> [L99-102] if at least one flag is set, cook_args is executed else raw_args is executed.
+21:05 < Niamkik> let see how cook_args work.
+21:06 < Niamkik> [L108-109] cook_args is declared and this function will take one argument: **argv (pointer to string).
+21:07 < Niamkik> [L111] fp variable is declared and will point to a FILE structure.
+21:07 < Niamkik> [L113] fp point now to stdin.
+21:08 < Niamkik> [L114] filename variable (see above) is set with string "stdin".
+21:09 < Niamkik> [L115-132] while *argv is not NULL (do while loop, while is at line 132)
+21:10 < mulander> L97 is outside the while loop
+21:11 < Niamkik> oups
+21:11 < mulander> so after parsing all options
+21:11 < mulander> you add optind to skip the things that getopt consumed
+21:11 < mulander> since argv is an char *argv[]
+21:11 < Niamkik> so, I think its for filename?
+21:11 < mulander> which is a pointer to an array of char pointers
+21:12 < mulander> so it will be moved forward by n amount of parsed args
+21:12 < mulander> so if you had 3 arguments in argv
+21:12 < mulander> and getopt parsed 2 of them
+21:12 < mulander> adding argv += optind would move it by those 2 arguments forward
+21:13 < mulander> so that argv[0] would point where old argv[2] was.
+21:13 < Niamkik> okay!
+21:13 < mulander> at least that's how I understand it but thats fairly easy to check
+21:14 < Niamkik> hum... But while loop don't have { and }
+21:14 < mulander> the curly braces are not required for while
+21:14 < mulander> if you only have a single instruction
+21:14 < mulander> while (1)
+21:14 < mulander>   puts("hello!\n");
+21:14 < Niamkik> yep, but the single instruction, end at L97?
+21:14 < mulander> will work fine
+21:15 < mulander> yes because switch is a single expression
+21:15 < mulander> while (condition) expression;
+21:15 < mulander> while (condition) switch(...) {};
+21:15 < Niamkik> so we are still in while loop?
+21:15 < mulander> only inside the switch
+21:15 < Niamkik> oh! okay
+21:16 < mulander> so
+21:16 < mulander> L69 while
+21:16 < mulander> L70-96 switch
+21:16 < mulander> L97 argv + optind;
+21:16 < mulander> L97 is outside the loop
+21:18 < mulander> it's the same with if statements in C
+21:18 < mulander> you can have
+21:18 < mulander> if (value)
+21:18 < mulander>   puts("hello");
+21:19 < mulander> the goto fail apple bug was them not spotting the missing braces
+21:19 < mulander> so they had
+21:19 < mulander> if (value)
+21:19 < Niamkik> yep, but I wasn't thinking as switch statement like an instruction in this case
+21:19 < mulander>   goto fail;
+21:19 < mulander>   goto fail;
+21:19 < mulander> without the braces the second goto was not conditional so executed always.
+21:20 < Niamkik> I'm a bit lost... L115. :)
+21:20 < Niamkik> I continue
+21:22 < Niamkik> [L116-118] if *argv is not NULL, and if *argv is not equal to "-", fp is set to stdin
+21:23 < mulander> sorry for the side track
+21:24 < Niamkik> no problem :)
+21:25 < Niamkik> [L119] we try to open a file in read-only mode with fopen, with filename stored in *argv.
+21:27 < Niamkik> fp variable is set with return of fopen, and if this one is NULL, we make a warning with warn function (print the filename). rval (return value in main function) is set to one and argv is incremented.
+21:27 < Niamkik> argv point now to the next filename.
+21:29 < Niamkik> [L123] we continue the execution
+21:30 < Niamkik> [L125] and we set filename variable with incremented value of *argv.
+21:30 < Niamkik> mulander: I have a doubt.
+21:31 < mulander> yes?
+21:31 < Niamkik> L119 to 123 is only a check?
+21:32 < Niamkik> we try to open a file, and if we can't we drop it by incrementing *argv
+21:32 < Niamkik> in this case we take the next filename
+21:32 < mulander> else if ((fp = fopen(*argv, "r")) == NULL) {
+21:32 < mulander> if the file is opened fp will be a file handle to the file
+21:32 < mulander> and will be passed to cook_buf on line 127
+21:33 < mulander> and filename set to the name of the file we managed to open
+21:33 < mulander> if we fail to open the file, we will print a warning
+21:33 < mulander> move argv to the next name
+21:33 < Niamkik> okay :)
+21:33 < mulander> and continue; which causes the loop to restart at L116
+21:33 < mulander> trying to open the next file and if that doesn't file call cook_buf with it
+21:33 < mulander> etc.
+21:34 < Niamkik> [L127] cook_buf is executed, and its first argument is file handle previously set
+21:35 < Niamkik> and I will finish this function and stop for tonight :)
+21:37 < Niamkik> [L128] if fp equal stdin, fp is cleared with clearerr (\u200bhttps://man.openbsd.org/clearerr)
+21:37 < Niamkik> [clearerr] The function clearerr() clears the end-of-file and error indicators for the stream pointed to by stream.
+21:38 < Niamkik> [L130-131] else we close file handle fp.
+21:39 < Niamkik> --- DONE ---

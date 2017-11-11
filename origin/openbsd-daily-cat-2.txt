@@ -1,0 +1,233 @@
+19:56 [Users #openbsd-daily]
+19:56 [ \renaud        ] [ duncaen  ] [ Harry   ] [ mandarg  ] [ phy1729   ] [ thrym     ] 
+19:56 [ adulteratedjedi] [ dxtr     ] [ jmsx    ] [ mattl    ] [ polishdub ] [ thrym__   ] 
+19:56 [ apotheon       ] [ early    ] [ job     ] [ mooghog  ] [ porteous  ] [ timclassic] 
+19:56 [ AslakR         ] [ eau      ] [ jsing   ] [ mulander ] [ qbit      ] [ tmc       ] 
+19:56 [ azend|vps      ] [ emigrant ] [ jwit_   ] [ nand1_   ] [ rofltech  ] [ toddf     ] 
+19:56 [ bcd            ] [ endojelly] [ kAworu  ] [ Niamkik  ] [ rsadowski ] [ toorop    ] 
+19:56 [ beiroot        ] [ epony    ] [ kl3     ] [ nielsk   ] [ S007      ] [ vyvup     ] 
+19:56 [ brynet         ] [ erethon2 ] [ kraucrow] [ njt      ] [ salva     ] [ weezelding] 
+19:56 [ cengizIO       ] [ fcambus  ] [ kysse   ] [ oldlaptop] [ sammi`    ] [ zautomata ] 
+19:56 [ corsah_        ] [ fireglow ] [ leah2   ] [ owa      ] [ Schoentoon] [ zelest    ] 
+19:56 [ davl           ] [ fyuuri   ] [ leochill] [ pardis   ] [ sigjuice  ] 
+19:56 [ Dhole          ] [ geetam   ] [ lteo[m] ] [ petrus_lt] [ SOLARIS_s ] 
+19:56 [ DuClare        ] [ ghostyy  ] [ lucias  ] [ philosaur] [ stateless ] 
+19:56 -!- Irssi: #openbsd-daily: Total of 75 nicks [0 ops, 0 halfops, 0 voices, 75 normal]
+19:58 < Niamkik> ok, let's go.
+19:58 < Niamkik> --- code read: /bin/cat ---
+19:58 < Niamkik> *** How cat(1) command is implemented on OpenBSD (second part) ***
+19:58 < Niamkik> Before starting this second part, I will give you all important links:
+19:59 < Niamkik>  * OpenBSD Official Man Page: https://man.openbsd.org/cat
+19:59 < Niamkik> * Official OpenBSD Repository: https://cvsweb.openbsd.org/cgi-bin/cvsweb/src/bin/cat/
+19:59 < Niamkik>  * Official OpenBSD Github Mirror: https://github.com/openbsd/src/tree/master/bin/cat
+19:59 < Niamkik>  * OpenGrok (bxr.su): http://bxr.su/OpenBSD/bin/cat/
+19:59 < Niamkik>  * POSIX Specification: http://pubs.opengroup.org/onlinepubs/9699919799/utilities/cat.html
+20:00 < Niamkik> Yesterday, we have stopped at [L133], end of cook_args function but, we have passed an important part at [L127]. We execute cook_buf with argument fp (file handle).
+20:01 < Niamkik> So we'll now look how cook_buf is implemented.
+20:02 < Niamkik> [L135-196] this function is a big one and define all cat behaviour based on flags.
+20:03 < Niamkik> Firstly, at [L138] we define all our local variable (all integers).
+20:03 < Niamkik> some variables like line and gobble are initialized to 0.
+20:06 < Niamkik> [L141-188] for loop there is used to retrieve a character at a time from file handle with getc. We get a character and store it in ch variable. If we reach the end of the file, we stop the loop. At each new loop we set prev (previous char) with the content of ch variable (current character).
+20:07 < Niamkik> next, we check for all flags. first if statement check if prev variable is a line feed, if its the case, some flags would interact with the main behavior of cat.
+20:11 < Niamkik> if previous character is a line feed, and if sflag is defined, we check if current character stored in ch is also a line feed ('\n'). If its the case, we also check if gobble is defined (different from NULL), if its the case, we continue to the next character from file handler.
+20:13 < Niamkik> gobble is not set, but need to be, so we set it. If ch dont contain '\n', we set gobble variable to 0.
+20:14 < Niamkik> at [L151] we check for nflag. If this flag is defined we enter in this if statement from [L151] to [L161].
+20:16 < Niamkik> if bflag isn't defined OR if current character is different from line feed ('\n'), we print the line number to stdout and increment this variable by 1. if you are interested to see how fprintf works, you can read https://man.openbsd.org/fprintf.
+20:18 < Niamkik> first argument of fprintf is a reference to a file handle (in our case stdout), next argument is a string format like traditional printf, and the third is our variable or parameters printed in previous arguments.
+20:18 < Niamkik> This last argument contain our line number (incremented).
+20:21 < Niamkik> we can check now if our function has worked as expected with ferror (https://man.openbsd.org/ferror). This function take only one argument, a file handle, in our case stdout, and test an error indicator. If this one is set (so, an error during printing ou line), we break the loop.
+20:25 < Niamkik> next, we check for eflag.
+20:26 < Niamkik> and print... nothing?
+20:27 < Niamkik> I'm just checking with cat -se $file
+20:27 < Niamkik> and see what this piece of code do :)
+20:28 < mulander> %6s\t is not nothing
+20:28 < Niamkik> So, I will first split a bit the string format, and I've forget to do the same for last fprintf.
+20:29 < Niamkik> yep, we print \t
+20:29 < mulander> more than that
+20:29 < Niamkik> %6s, minimum field of 6, and s refer to a string? right? in our case ""
+20:30 < mulander> so it would 6 pad the empty string wouldn't it?
+20:30  * mulander tests
+20:31 < mulander> $ make pad
+20:31 < mulander> cc -O2 -pipe    -o pad pad.c 
+20:31 < mulander> $ ./pad                                                                                                                                                                                                                                                                                                                      
+20:31 < mulander> ;      ;
+20:31 -!- Irssi: Pasting 7 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:31 < mulander> $ cat pad.c
+20:31 < mulander> #include <stdio.h>
+20:31 < mulander> int
+20:31 < mulander> main(int argc, char **argv)
+20:31 < mulander> {
+20:31 < mulander>         printf(";%6s;\n", "");
+20:31 < mulander> }
+20:31 < Niamkik> hum... ok!
+20:31 < Niamkik> its only a pad
+20:32 < mulander> but why is it padding?
+20:32 < Niamkik> good question... If you have answer. :)
+20:33 < Niamkik> I don't know
+20:33 < mulander> don't but let's try to see
+20:33 < Niamkik> in cat man: Print a dollar sign ('$') at the end of each line. Implies the -v option to display non-printing characters.
+20:34 < mulander> makes sense now
+20:34 < mulander> so if nflag is used
+20:34 < mulander> each line is prefixed with a character count
+20:36 < mulander> it's to handle -b
+20:36 -!- Irssi: Pasting 6 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+20:36 < mulander> $ cat -bne t.txt                                                                                                                                                                                                                                                                                                             
+20:36 < mulander>      1  a$
+20:36 < mulander>         $
+20:36 < mulander>      2  b$
+20:36 < mulander>         $
+20:36 < mulander>      3  c$
+20:36 < mulander> -b causes the line count to skip empty lines
+20:36 < mulander> but -e forces empty lines to have a $ printed
+20:36 < mulander> without that padding the $ would not be aligned to account for the line count numbers on the other lines.
+20:37 < Niamkik> oh!
+20:37 < Niamkik> got it!
+20:38 < Niamkik> I try on my side :p
+20:38 < Niamkik> ok :)
+20:39 < Niamkik> so, like previous if statement, if an error occurs when we print to stdout, we stop the loop.
+20:41 < Niamkik> now, at [L163] we check if current character is a line feed ('\n'), if its the case, we also check if eflag is set and put a '$' sign.
+20:42 < Niamkik> putchar (https://man.openbsd.org/putchar) put a char on the screen
+20:42 < Niamkik> putchar return EOF if a write error occurs (you can see that in RETURN VALUES in man page)
+20:43 < Niamkik> So, if we reaches the end of the buffer, and eflag is set, we break our loop (because nothing to print)
+20:44 < Niamkik> at [L166] we also check if our current character is equal to tab ('\t'), if its the case, we check if tflag is set. This flag replace '\t' by '^I'.
+20:45 < Niamkik> To make that possible, we use putchar 2 times, first time to print '^' and second time to print 'I'.
+20:46 < Niamkik> In each case, we check if putchar return EOF (end of file) and if its the case, we break the loop. In all case, if we have found '\t', we switch to the next character.
+20:46 < mulander> why two putchar vs just one puts?
+20:46 < mulander> ah puts would add a newline
+20:47 < Niamkik> one question: why not using printf?
+20:47 < mulander> too heavy to just print 2 chars?
+20:47 < mulander> printf comes with a whole machinery to parse the format string
+20:47 < mulander> but I guess most compilers optimize that down
+20:47 < mulander> if you have time post read you could compile it with a change like that and see if it compiles to the same instruction
+20:48 < Niamkik> I will try that another day, but yeah.
+20:49 < Niamkik> printf seems a bit overkill.
+20:51 < Niamkik> ok, next flag checked is vflag at [L172], this flag displays non-printing characters by replacing them with combination of multiple char like '\n' to $ and '\t' to ^I
+20:52 < Niamkik> so, first check, if current char (ch) isn't ascii (we use isascii function https://man.openbsd.org/isascii)
+20:53 < Niamkik> we replace this character by 'M-' followed by ascii code of this character, to make this possible, we use toascii function (https://man.openbsd.org/toascii)
+20:55 < Niamkik> we set current character to returned value of toascii function (ascii code).
+20:56 < Niamkik> We also check if we have reached the end of file, and if its the case, we just break the loop.
+20:57 < Niamkik> next statement is about control characters. If current char is a control char (we check that with iscntrl function https://man.openbsd.org/iscntrl.3)
+21:00 < Niamkik> we replace this one by '^' followed by its value. Current character is checked a second time.
+21:01 < Niamkik> if our current character is equal to '\177' (del) we print '?' else, we put the result of (ch OR 0100).
+21:02 < Niamkik> Interesting pattern, why 0100?
+21:03 < Niamkik> I guess its for reuse ascii character table and only print visible char... But not sure. I will try.
+21:06 < phy1729> That's octal, so in hex it's 0x40 which converts it to the corresponding letter. E.g. 0x01 -> 0x41 = A
+21:07 < Niamkik> yep :)
+21:08 < Niamkik> #include <stdio.h>
+21:08 < Niamkik> int main() {
+21:08 < Niamkik>  int ch = '\178';
+21:08 < Niamkik>  putchar(ch == '\177' ? '?' : ch | 0100);
+21:08 < Niamkik>  printf("\n");
+21:08 < Niamkik> }
+21:09 < Niamkik> again, if putchar return EOF, we break our loop, else we continue to the next character.
+21:10 < Niamkik> if any flag is set at [L186] we just print current character, and check if we have reached the end of the file.
+21:11 < Niamkik> at [L189] we check if our file handle contain some error, if its the case, we alert user with warn function (message contain the filename), we set rval to 1 and clear error from file handle fp with clearerr.
+21:12 < Niamkik> finally, at [L194] we check if stdout contain some error, and if its the case, we print an error with err function, containing "stdout" as message.
+21:13 < Niamkik> ok! cook_args execution path is done! We can return at [L100]
+21:14 < Niamkik> and switch to next possibility: no flag set. In this case, we'll execute raw_args with the list of file contained in argv.
+21:16 < Niamkik> [L198-221] raw_args function take only a pointer to pointer of char. First step: create a local function named fd, this variable will store our file descriptor.
+21:16 < Niamkik> [L203] we get this file description with fileno function (https://man.openbsd.org/fileno.3) and set filename with string "stdin".
+21:17 < Niamkik> so, by default, we use stdin. do..while loop is defined at [L205-220] and read filename contained in argv
+21:19 < Niamkik> if *argv is defined and if argv isn't equal "-" we set fd to file descriptor from stdin.
+21:20 < Niamkik> else, we try to open in read-only the filename contained in *argv, if something wrong happen, we warn user with the filename, set return value to 1 and try the next filename.
+21:21 < Niamkik> [L217] we execute raw_cat function with file descriptor from opened file.
+21:22 < Niamkik> how raw_cat is implemented? this function is defined at [L223-250].
+21:22 < Niamkik> raw_cat take one argument, a file descriptor.
+21:25 < Niamkik> at [L226-230] we create a lot of local variable, wfd (will contain stdout file descriptor), nr (size from readed characters), nw (size for written character), off (counter)
+21:26 < Niamkik> bsize (buffer size for memory allocation)
+21:26 < Niamkik> *buf initialized to NULL (will contain the memory allocated)
+21:27 < Niamkik> and stat (will contain file stat)
+21:28 < Niamkik> [232] we get the file descriptor of stdout via fileno function (https://man.openbsd.org/fileno)
+21:30 < Niamkik> [L233-239] if our buffer is empty, we check stat of opened file with fstat (https://man.openbsd.org/man2/stat.2) and store its result in sbuf previously defined.
+21:30 < Niamkik> if we can't get those informations, we execute err function with "stdout" as argument.
+21:32 < Niamkik> at [L236] we use our macro MAXIMUM, this code after preprocessing look like:
+21:32 < Niamkik> bsize = (((sbuf.st_blksize) > (1024)) ? (sbuf.st_blksize) : (1024));
+21:33 < Niamkik> NOTE: to make this you can use cc -E cat.c and read raw_cat function definition
+21:34 < Niamkik> if sbuf.st_blksize is greater than 1024 (BUFSIZ) we set bsize to sbuf.st_blksize else bsize will be set to 1024.
+21:36 < Niamkik> [L237] we set our buffer buf with malloc (https://man.openbsd.org/malloc), and try to allocate memory with the size from bsize.
+21:36 < Niamkik> if this function return NULL, we can't allocate memory, and we return an error.
+21:38 < Niamkik> at [L240] we have our read/write loop, we read the content of our file descriptor (rfc), store it in our buffer buf, and do this action until nr is not NULL.
+21:40 < Niamkik> while data are present in buffer, we write it with write function (https://man.openbsd.org/man2/write.2) to stdout
+21:40 < Niamkik> if write return an error, we stop execution and print the reason.
+21:42 < mulander> so why do we have a raw_cat and cook_buf?
+21:42 < mulander> as in what's the main difference between them apart command line handling.
+21:42 < Niamkik> I have another question... buffer isn't freed?
+21:43 < mulander> yes, I assume on purpose
+21:43 < mulander> as you are guaranteed by the OS to free the resources on exit
+21:43 < Niamkik> ok
+21:43 < mulander> if you did a cat * in a huge directory then it would probably add up
+21:43 < mulander> but neglecctable
+21:44 < mulander> the perf drop from the free calls would be larger waste I assume
+21:46 < Niamkik> I think we have practically done with cat. [L245] we check if read function return a good value and if its not the case we print a warning and the return value to 1. In main function [L103] we close stdout and return rval (our return value).
+21:46 < mulander> I think it's worth to point out that raw_cat
+21:46 < mulander> unlike the buf one uses write/read syscalls instead of the stdio lib functions
+21:47 < mulander> http://man.openbsd.org/write.2
+21:48 < Niamkik> performance issue?
+21:48 < mulander> it should be more performant
+21:48 < mulander> and that's also why it uses fstat to get the optimal block size
+21:48 < mulander> I believe the perf difference would be actually very large
+21:49 < mulander> probably why there's a second block just for the no arguments version instead of just handling it all in a single code path.
+21:50 < Niamkik> so, why not using raw_cat also in cook_args?
+21:50 < Niamkik> cook_buf*
+21:50 < mulander> you can't as you are working on lines
+21:50 < mulander> while here you are reading large chunks of code at once
+21:50 < Niamkik> ok
+21:51 < mulander> so cook_buf reads char by char and analyses it while raw_cat just grabs a chunk of input and spits it out to stdout
+21:51 < mulander> try this
+21:51 < mulander> echo abc > test.txt
+21:52 < mulander> $ ktrace cat test.txt        
+21:52 < mulander> abc                           
+21:52 < mulander> $ kdump
+21:52 -!- Irssi: Pasting 8 lines to #openbsd-daily. Press Ctrl-K if you wish to do this or Ctrl-C to cancel.
+21:52 < mulander>  61177 cat      CALL  read(3,0x50a9b19d000,0x10000)                  
+21:52 < mulander>  61177 cat      GIO   fd 3 read 4 bytes                                 
+21:52 < mulander>        "abc                                    
+21:52 < mulander>        "
+21:52 < mulander>  61177 cat      RET   read 4                                                  
+21:52 < mulander>  61177 cat      CALL  write(1,0x50a9b19d000,0x4)
+21:52 < mulander>  61177 cat      GIO   fd 1 wrote 4 bytes
+21:52 < mulander>        "abc  
+21:52 < mulander>        "   
+21:52 < mulander> that's the gist of it
+21:53 < Niamkik> its practically the same with flags.
+21:53 < mulander> now try
+21:53 < mulander> ktrace cat -e test.txt
+21:54 < Niamkik> with cook_buf: 97 lines on my side, and with raw_cat: 81
+21:55 < mulander> it still resulted in a single read/write
+21:55 < mulander> guess that's thanks to buffered io
+21:57 < Niamkik> ~15% performance based on line count (I've create more files to test)
+21:58 < Niamkik> dd if=/dev/random of=test.txt bs=1m count=10
+21:58 < Niamkik> ktrace cat -ne test.txt >/dev/null
+21:58 < Niamkik> kdump | wc -l
+21:58 < Niamkik> 673465
+21:58 < Niamkik> ktrace cat test.txt >/dev/null
+21:59 < Niamkik> kdump | wc -l
+21:59 < Niamkik> 717087
+22:02 < mulander> I wonder
+22:02 < mulander> if >/dev/null changes blocksize reported on the fstat
+22:07 < mulander> $ ./blk            
+22:07 < mulander> sbuf.st_blksize=65536
+22:07 < mulander> $ ./blk >/dev/null 
+22:07 < mulander> sbuf.st_blksize=65536
+22:07 < mulander> nope, no difference
+22:07 < Niamkik> hum... gprof is broken on OpenBSD?
+22:07 < Niamkik> cd /usr/src/bin/cat && make obj && make DEBUG=-pg
+22:08 < Niamkik> /usr/obj/bin/cat/cat
+22:08 < Niamkik> Segmentation fault (core dumped)
+22:09 < mulander> the default compiler is clang
+22:09 < mulander> (on amd64 at least)
+22:10 < Niamkik> cland isn't compatible with gprof D:
+22:11 < Niamkik> so, next step, read clang documentation? :)
+22:11 < mulander> ok I side tracked you from the read enough :)
+22:11 < Niamkik> no problem
+22:11 < Niamkik> it's interesting
+22:12 < Niamkik> Just to finish this code reading, some other implementation from different open source project:
+22:12 < Niamkik> UNIX1 cat: https://github.com/qrush/unix/blob/master/src/cmd/cat.s
+22:12 < Niamkik> DragonFlyBSD cat: http://bxr.su/DragonFly/bin/cat/
+22:12 < Niamkik> FreeBSD cat: http://bxr.su/FreeBSD/bin/cat/
+22:12 < Niamkik> NetBSD cat: http://bxr.su/NetBSD/bin/cat/
+22:12 < Niamkik> GNU cat: https://git.savannah.gnu.org/gitweb/?p=coreutils.git;a=blob;f=src/cat.c;h=a3680a3fc6a5ebf3a72ba914281ff98e805291d4;hb=HEAD
+22:13 < Niamkik> and a list of more implementation is available on github: https://gist.github.com/pete/665971
+22:13 < Niamkik> so...
+22:13 < Niamkik> --- DONE ---
+22:13 < Niamkik> :)

@@ -61,6 +61,8 @@ You can find original raw IRC logs here:
  * 2017-08-04: https://junk.tintagel.pl/openbsd-daily-dlopen-3.txt by @mulander
  * 2017-08-11: https://junk.tintagel.pl/openbsd-daily-dlopen-4.txt by @mulander
  * 2017-08-18: https://junk.tintagel.pl/openbsd-daily-dlopen-5.txt by @mulander
+ * 2017-11-09: https://junk.tintagel.pl/openbsd-daily-cat.txt by @niamtokik
+ * 2017-11-10: https://junk.tintagel.pl/openbsd-daily-cat-2.txt by @niamtokik
 
 Copies of these logs are available on this repository in `origin` directory.
 
